@@ -73,18 +73,41 @@
   .joined-note{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft); text-align:center; margin-top:6px;}
   .host-note{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
   .game-code-display{font-family:"IBM Plex Mono",monospace; font-weight:600; letter-spacing:.22em; font-size:clamp(46px,13vw,80px); line-height:1; color:var(--flag); margin:6px 0 2px;}
+
+  /* ================= RESULTS CUTSCENE ================= */
+  .results-stage{background:#12100E; color:#F6F1E4; border-radius:8px; padding:36px 24px 30px; text-align:center;}
+  .results-kicker{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.2em; text-transform:uppercase; opacity:.6; margin-bottom:6px;}
+  .results-title{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(30px,6vw,44px); text-transform:uppercase; margin:0 0 26px;}
+  .podium{display:flex; align-items:flex-end; justify-content:center; gap:14px; margin-bottom:30px;}
+  .podium-slot{display:flex; flex-direction:column; align-items:center; gap:8px; width:120px;}
+  .podium-slot .p-name{font-weight:700; font-size:14px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .podium-slot .p-score{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:15px; color:#E8615C;}
+  .podium-bar{width:100%; border-radius:6px 6px 0 0; display:flex; align-items:flex-start; justify-content:center; padding-top:8px; font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:26px;}
+  .podium-slot.rank-1 .podium-bar{height:120px; background:#E8615C; color:#241110;}
+  .podium-slot.rank-2 .podium-bar{height:90px; background:#8A9A93; color:#12100E;}
+  .podium-slot.rank-3 .podium-bar{height:66px; background:#6D5A45; color:#F6F1E4;}
+  .results-rest{max-width:420px; margin:0 auto; text-align:left;}
+  .results-row{display:flex; justify-content:space-between; padding:7px 4px; border-bottom:1px solid rgba(246,241,228,0.15); font-size:14px;}
+  .results-row .r-rank{font-family:"IBM Plex Mono",monospace; opacity:.55; width:26px; flex:none;}
+  .results-row .r-score{font-family:"IBM Plex Mono",monospace; font-weight:600;}
+  .results-empty{opacity:.6; padding:20px 0; font-family:"IBM Plex Mono",monospace; font-size:13px;}
+
+  /* ================= HISTORY ================= */
+  .history-tabs{display:flex; gap:8px; margin-bottom:4px; flex-wrap:wrap;}
+  .tab-btn{padding:8px 14px; border-radius:20px; border:1.5px solid var(--rule); background:var(--card-2); color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; font-size:12.5px; cursor:pointer;}
+  .tab-btn.active{border-color:var(--flag); color:var(--flag); background:var(--flag-ink);}
 </style>
 </head>
 <body>
 <div id="app" class="wrap"></div>
 
-<script src="engine.js"></script>
+<script src="../engine.js"></script>
 <script>
 (function(){
   "use strict";
 
   Engine.configure({
-    appsScriptUrl: "https://script.google.com/macros/s/AKfycbwdGJAOLH5JskqJTckVxZuOGcu-nBAEj0DXe5M2tKcWHby4ZfVRM_1-IL11WA_g0iIr7Q/exec",
+    appsScriptUrl: "PASTE_YOUR_APPS_SCRIPT_URL_HERE",
     gameType: "skew-the-feed"
   });
 
@@ -94,7 +117,11 @@
   var state = {
     hostCode: "", hostChecked: false, hostCreating: false, hostCreateError: "",
     game: null, hostDurationMinutes: DEFAULT_MINUTES,
-    playersShown: []
+    playersShown: [],
+    screen: "dashboard",       // dashboard | results | history
+    resultsRound: null, resultsRows: [], resultsLoading: false,
+    historyTab: "round",       // round | game | all
+    historyRows: [], historyLoading: false
   };
 
   function lsGet(k){ try{ return localStorage.getItem(k)||""; }catch(e){ return ""; } }
@@ -110,7 +137,12 @@
   }
 
   function render(){
-    document.getElementById("app").innerHTML = state.hostCode ? viewDashboard() : viewCreate();
+    var html;
+    if (!state.hostCode) html = viewCreate();
+    else if (state.screen === "results") html = viewResults();
+    else if (state.screen === "history") html = viewHistory();
+    else html = viewDashboard();
+    document.getElementById("app").innerHTML = html;
     bind();
   }
 
@@ -169,6 +201,7 @@
         '</div>' +
         '<button class="btn btn-flag" id="hostStartBtn" style="margin-top:16px;" '+(running?"disabled":"")+'>'+(phase==="ended"?"Start Next Round":"Start Round")+'</button>' +
         '<button class="btn btn-ghost" id="hostEndBtn" style="margin-top:10px; display:'+(running?"block":"none")+';">End Round Now</button>' +
+        (phase==="ended" ? '<button class="btn btn-ghost" id="showResultsBtn" style="margin-top:10px;">Show Round Results</button>' : '') +
         '<p class="host-note">Every device with this code gets a 5-second countdown mask, then plays together for the length you set above. Everyone still moves through posts at their own pace &mdash; the clock is just shared.</p>' +
       '</div>' +
       '<div class="card" style="margin-top:16px;">' +
@@ -178,11 +211,111 @@
         '<div class="joined-note" id="hostJoinedNote">'+state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round &middot; board refreshes every 15s</div>' +
       '</div>' +
       '<div style="text-align:center; margin-top:16px;">' +
-        '<button class="link-quiet" id="newGameToggle" style="display:block; margin:6px auto 0;">Start a different game (new code)</button>' +
+        '<button class="link-quiet" id="historyBtn" style="display:block; margin:6px auto 0;">View history (this round · this game · all games)</button>' +
+        '<button class="link-quiet" id="newGameToggle" style="display:block; margin:10px auto 0;">Start a different game (new code)</button>' +
         '<div class="reset-box" id="newGameBox" style="display:none; max-width:320px; margin:8px auto 0;">' +
           '<input type="text" id="newGameConfirm" placeholder="Type NEW to confirm" />' +
           '<button class="btn btn-ghost btn-sm" id="newGameGo" style="width:auto;">Go</button>' +
         '</div>' +
+      '</div>';
+  }
+
+  /* ---------------------------------------------------------------
+     RESULTS CUTSCENE — a dedicated screen the host can project once
+     a round ends, pulling a fresh final read of that round's scores
+     from the Players tab (not the 15s-stale cache the dashboard uses).
+  ----------------------------------------------------------------*/
+  function openResults(){
+    state.screen = "results";
+    state.resultsRound = state.game ? state.game.round : null;
+    state.resultsRows = [];
+    state.resultsLoading = true;
+    render();
+    if (!state.hostCode || state.resultsRound == null) { state.resultsLoading = false; render(); return; }
+    Engine.players.getPlayers(state.hostCode, state.resultsRound).then(function(rows){
+      state.resultsRows = rows || [];
+      state.resultsLoading = false;
+      render();
+    }).catch(function(){ state.resultsLoading = false; render(); });
+  }
+
+  function viewResults(){
+    var rows = state.resultsRows;
+    var top3 = rows.slice(0, 3);
+    var rest = rows.slice(3);
+    var order = [1, 0, 2]; // display order: 2nd, 1st, 3rd — classic podium layout
+    var podium = top3.length ? '<div class="podium">' + order.map(function(i){
+      var r = top3[i];
+      if (!r) return "";
+      var rank = i + 1;
+      return '<div class="podium-slot rank-'+rank+'"><div class="p-name">'+esc(r.displayName)+'</div><div class="p-score">'+r.score+'</div>' +
+        '<div class="podium-bar">'+rank+'</div></div>';
+    }).join("") + '</div>' : '';
+    var restHtml = rest.length ? '<div class="results-rest">' + rest.map(function(r,i){
+      return '<div class="results-row"><span class="r-rank">'+(i+4)+'</span><span>'+esc(r.displayName)+'</span><span class="r-score">'+r.score+'</span></div>';
+    }).join("") + '</div>' : '';
+    var body = state.resultsLoading ? '<div class="results-empty">Tallying the final wire&hellip;</div>' :
+      (!rows.length ? '<div class="results-empty">No scores reported for this round.</div>' : podium + restHtml);
+    return '' +
+      '<button class="backlink" id="resultsBackBtn">&larr; Back to dashboard</button>' +
+      '<div class="results-stage">' +
+        '<div class="results-kicker">Round '+(state.resultsRound||0)+' &middot; Final Edition</div>' +
+        '<div class="results-title">The Results Are In</div>' +
+        body +
+      '</div>' +
+      '<div style="text-align:center; margin-top:16px;"><button class="btn btn-flag" id="resultsNextBtn">Start Next Round</button></div>';
+  }
+
+  /* ---------------------------------------------------------------
+     HISTORY — this round / this game (code) / all games (gameType)
+  ----------------------------------------------------------------*/
+  function openHistory(tab){
+    state.screen = "history";
+    state.historyTab = tab || state.historyTab;
+    loadHistory();
+  }
+
+  function loadHistory(){
+    state.historyLoading = true; state.historyRows = []; render();
+    var opts = {};
+    if (state.historyTab === "round"){
+      if (!state.game){ state.historyLoading = false; render(); return; }
+      opts = { code: state.hostCode, round: state.game.round };
+    } else if (state.historyTab === "game"){
+      opts = { code: state.hostCode };
+    } // "all" — no code filter, all games of this gameType
+    Engine.leaderboard.get(opts).then(function(rows){
+      state.historyRows = rows || []; state.historyLoading = false; render();
+    }).catch(function(){ state.historyLoading = false; render(); });
+  }
+
+  function viewHistory(){
+    var tabs = [
+      {key:"round", label:"This Round"},
+      {key:"game", label:"This Game"},
+      {key:"all", label:"All Games"}
+    ];
+    var tabBtns = tabs.map(function(t){
+      return '<button class="tab-btn'+(state.historyTab===t.key?' active':'')+'" data-tab="'+t.key+'">'+t.label+'</button>';
+    }).join("");
+    var body;
+    if (state.historyLoading) body = '<div class="lb-empty">Loading&hellip;</div>';
+    else if (!state.historyRows.length) body = '<div class="lb-empty">No results in this view yet.</div>';
+    else body = '<div style="overflow-x:auto;"><table class="lb"><thead><tr><th>#</th><th>Name</th><th>Period</th><th>Code</th><th class="num">Round</th><th class="num">Score</th><th class="num">Acc.</th></tr></thead><tbody>' +
+      state.historyRows.map(function(r,i){
+        var badgeCls = "rank-badge"+(i<3?" top":"");
+        return '<tr><td><span class="'+badgeCls+'">'+(i+1)+'</span></td><td>'+esc(r.displayName)+'</td>' +
+          '<td class="mono" style="color:var(--ink-soft); font-size:12px;">'+esc(r.period||"&mdash;")+'</td>' +
+          '<td class="mono" style="color:var(--ink-soft); font-size:12px;">'+esc(r.code||"&mdash;")+'</td>' +
+          '<td class="num">'+r.round+'</td><td class="num">'+r.score+'</td><td class="num">'+(r.accuracy!=null?r.accuracy+'%':'&mdash;')+'</td></tr>';
+      }).join("") + '</tbody></table></div>';
+    return '' +
+      '<button class="backlink" id="historyBackBtn">&larr; Back to dashboard</button>' +
+      masthead() +
+      '<div class="card">' +
+        '<p class="eyebrow" style="margin:0 0 10px;">Results History</p>' +
+        '<div class="history-tabs">'+tabBtns+'</div>' +
+        body +
       '</div>';
   }
 
@@ -209,12 +342,21 @@
     if (!mins || mins < 1) mins = DEFAULT_MINUTES;
     if (mins > 20) mins = 20;
     state.hostDurationMinutes = mins;
-    Engine.session.startRound(state.hostCode, mins);
+    // startRound() updates Engine's internal game state synchronously and
+    // returns it immediately — render on THAT rather than waiting for the
+    // next poll, so the host's own screen reacts the instant they click,
+    // with no lag from the Apps Script round trip.
+    var game = Engine.session.startRound(state.hostCode, mins);
+    state.game = game; lastRound = game.round; state.playersShown = [];
+    state.screen = "dashboard";
+    render();
   }
 
   function hostEndRound(){
     if (!state.hostCode) return;
-    Engine.session.endRound(state.hostCode);
+    var game = Engine.session.endRound(state.hostCode);
+    state.game = game;
+    render();
   }
 
   var scoreTimer = null;
@@ -249,6 +391,7 @@
   }
 
   var lastRound = null;
+  var lastPhase = null;
   function startPolling(code){
     Engine.session.startPolling(code, 1000, function(game){
       state.game = game; state.hostChecked = true;
@@ -258,8 +401,16 @@
         render();
         return;
       }
-      if (document.getElementById("hostPhasePill")) updateClockUI();
-      if (game.round !== lastRound){ lastRound = game.round; state.playersShown = []; render(); }
+      var phase = Engine.session.derivePhase(game);
+      var roundChanged = game.round !== lastRound;
+      var phaseChanged = phase !== lastPhase;
+      lastRound = game.round; lastPhase = phase;
+      if (roundChanged) state.playersShown = [];
+      if ((roundChanged || phaseChanged) && state.screen === "dashboard") {
+        render(); // full re-render so the phase pill, buttons, and "Show Results" link all stay in sync
+      } else if (document.getElementById("hostPhasePill")) {
+        updateClockUI();
+      }
       ensureScoreLoop();
     });
   }
@@ -269,6 +420,14 @@
     if ((el = document.getElementById("hostCreateBtn"))) el.addEventListener("click", hostCreateGame);
     if ((el = document.getElementById("hostStartBtn"))) el.addEventListener("click", hostStartRound);
     if ((el = document.getElementById("hostEndBtn"))) el.addEventListener("click", hostEndRound);
+    if ((el = document.getElementById("showResultsBtn"))) el.addEventListener("click", openResults);
+    if ((el = document.getElementById("resultsBackBtn"))) el.addEventListener("click", function(){ state.screen = "dashboard"; render(); });
+    if ((el = document.getElementById("resultsNextBtn"))) el.addEventListener("click", hostStartRound);
+    if ((el = document.getElementById("historyBtn"))) el.addEventListener("click", function(){ openHistory(); });
+    if ((el = document.getElementById("historyBackBtn"))) el.addEventListener("click", function(){ state.screen = "dashboard"; render(); });
+    Array.prototype.forEach.call(document.querySelectorAll(".tab-btn"), function(tabBtn){
+      tabBtn.addEventListener("click", function(){ openHistory(tabBtn.getAttribute("data-tab")); });
+    });
     if ((el = document.getElementById("hostMinutes"))) el.addEventListener("change", function(){ var v=parseFloat(this.value); if (v) state.hostDurationMinutes = v; });
     if ((el = document.getElementById("newGameToggle"))) el.addEventListener("click", function(){ var box=document.getElementById("newGameBox"); box.style.display = box.style.display==="none"?"flex":"none"; });
     if ((el = document.getElementById("newGameGo"))) el.addEventListener("click", function(){ var val=document.getElementById("newGameConfirm").value.trim().toUpperCase(); if (val==="NEW") hostCreateGame(); });
