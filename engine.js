@@ -128,10 +128,20 @@
     });
   }
 
+  // Apps Script round-trips run 1-2.5s, which is slower than a 1s poll
+  // interval — so responses CAN arrive out of order (a slow response to an
+  // older request landing after a faster response to a newer one). Each
+  // tick gets a rising sequence number; a response is applied only if it's
+  // still the most recent request in flight, so a late straggler can never
+  // overwrite fresher state.
+  var pollSeq = 0;
+
   function startPolling(code, intervalMs, onUpdate) {
     stopPolling();
     function tick() {
+      var mySeq = ++pollSeq;
       apiGet("getGame", { code: code }).then(function (game) {
+        if (mySeq !== pollSeq) return; // a newer request already finished — drop this stale one
         currentGame = game && game.exists ? game : null;
         onUpdate(currentGame);
       }).catch(function () { /* transient network hiccup — next tick retries */ });
@@ -144,20 +154,42 @@
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }
 
+  // Both take effect on the CALLER's screen immediately (currentGame is
+  // updated synchronously, before the network write even resolves) so the
+  // host never has to sit and watch their own dashboard wait on a poll to
+  // reflect a button they just pressed. Other devices still learn about it
+  // on their next poll — that hop can't be eliminated without a push
+  // channel, which Apps Script doesn't offer — but the local wall-clock
+  // math means everyone still converges on the exact same start/end
+  // instant once they do hear about it, they just may join the countdown
+  // already a beat or two in rather than always seeing a clean "5".
   function startRound(code, minutes) {
     var durationSec = Math.round(minutes * 60);
     var now = Date.now();
     var countdownEndsAt = now + COUNTDOWN_MS;
     var gameEndsAt = countdownEndsAt + durationSec * 1000;
     var round = (currentGame && currentGame.round ? currentGame.round : 0) + 1;
-    return apiPost("startRound", {
+    currentGame = {
+      exists: true, code: code, gameType: CONFIG.gameType, round: round,
+      durationSec: durationSec, countdownEndsAt: countdownEndsAt, gameEndsAt: gameEndsAt, startedAt: now
+    };
+    apiPost("startRound", {
       code: code, round: round, durationSec: durationSec,
       countdownEndsAt: countdownEndsAt, gameEndsAt: gameEndsAt
-    });
+    }).catch(function () {});
+    return currentGame;
   }
 
   function endRound(code) {
-    return apiPost("endRound", { code: code });
+    var now = Date.now();
+    if (currentGame) {
+      currentGame = Object.assign({}, currentGame, {
+        gameEndsAt: now,
+        countdownEndsAt: Math.min(currentGame.countdownEndsAt || now, now)
+      });
+    }
+    apiPost("endRound", { code: code }).catch(function () {});
+    return currentGame;
   }
 
   /* ---------------------------------------------------------------
@@ -176,8 +208,16 @@
     return apiGet("getPlayers", { code: code, round: round });
   }
 
-  function getLeaderboard(limit) {
-    return apiGet("getLeaderboard", { gameType: CONFIG.gameType, limit: limit || 100 });
+  // Accepts either a plain number (legacy — just a limit) or an options
+  // object: {limit, code, round}. Omitting code/round returns the
+  // all-time board across every game code ever played for this gameType;
+  // passing code narrows to one game's history; passing code+round
+  // narrows to a single round's final results.
+  function getLeaderboard(opts) {
+    var o = (typeof opts === "number") ? { limit: opts } : (opts || {});
+    return apiGet("getLeaderboard", {
+      gameType: CONFIG.gameType, limit: o.limit || 100, code: o.code, round: o.round
+    });
   }
 
   /* ---------------------------------------------------------------
