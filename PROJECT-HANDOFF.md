@@ -46,9 +46,11 @@ One Sheet, four tabs. Tab names must match exactly (case-sensitive) because `Cod
 
 `display_name` is what shows on any screen (nickname if the student has one, otherwise first name) — student ID numbers are never displayed on shared screens, only typed at login.
 
-**`Games`** — one row per game code ever created, across every game type:
-| code | gameType | round | durationSec | countdownEndsAt | gameEndsAt | startedAt | createdAt |
-|---|---|---|---|---|---|---|---|
+**`Games`** — one row per game code ever created, across every game type. Rows are never deleted, so old codes stick around indefinitely — see `retired` below and §9's note on stale cached codes:
+| code | gameType | round | durationSec | countdownEndsAt | gameEndsAt | startedAt | createdAt | retired |
+|---|---|---|---|---|---|---|---|---|
+
+`retired` is `false`/blank for every row until the host explicitly starts a *different* game — see the `createGame` write below. It's never set by starting a new round on the same code.
 
 **`Players`** — live, in-progress scores for the *current* round. One row per student per round per game code; overwritten continuously as a student plays:
 | code | round | gameType | studentId | displayName | period | score | streak | bestStreak | correct | attempted | updatedAt |
@@ -66,12 +68,12 @@ Attached to the Sheet via **Extensions → Apps Script**. It's a small HTTP API:
 
 **Reads (GET, query string params):**
 - `?action=getStudent&id=19136` → looks up the roster, returns `{found, studentId, displayName, period}`
-- `?action=getGame&code=ABCD` → returns the current state of that game code, or `{exists:false}`
+- `?action=getGame&code=ABCD` → returns the current state of that game code (including `retired`), or `{exists:false}`
 - `?action=getPlayers&code=ABCD&round=1` → live scoreboard rows for that code+round, sorted by score
 - `?action=getLeaderboard&gameType=skew-the-feed&code=ABCD&round=1` → rows from `Runs`. `code` and `round` are both optional: omit both for the all-time board across every game code ever played for that `gameType`; pass `code` alone for one game's full history; pass `code`+`round` for just that round's final results.
 
 **Writes (POST, JSON body sent as `text/plain` — see §7 on why):**
-- `createGame` `{code, gameType}` — adds a new `Games` row
+- `createGame` `{code, gameType, retireCode?}` — adds a new `Games` row; if `retireCode` is given, marks that other row's `retired` true in the same lock (see `host.html`'s "Start a different game" action — a fresh round on the *same* code never passes this)
 - `startRound` `{code, round, durationSec, countdownEndsAt, gameEndsAt}` — updates a `Games` row with a new round's timing
 - `endRound` `{code}` — force-ends the current round early
 - `updatePlayer` `{code, round, gameType, studentId, displayName, period, score, streak, bestStreak, correct, attempted}` — upserts a `Players` row
@@ -104,7 +106,7 @@ Engine.configure({
 What's available after that:
 
 - **`Engine.identity`** — student-ID login, no accounts. `Engine.identity.lookup(id)` checks the typed ID against the `Students` roster and, on success, caches `studentId`/`displayName`/`period` (in `localStorage`, so a returning student on the same device skips re-typing it — though they still need to re-enter it if the game requires re-verifying the game code). `Engine.identity.isLoggedIn()` checks whether that's already populated.
-- **`Engine.session`** — game codes and timing. `createGame()` generates a 4-character code (avoiding visually ambiguous characters: no `0/O/1/I/L`) and creates the `Games` row. `checkCode(code)` verifies a code exists. `startPolling(code, intervalMs, onUpdate)` polls `getGame` and calls `onUpdate` with the latest game object (or `null` if the code doesn't exist). It reschedules itself *after* each response rather than on a fixed interval, so a slow backend backs off instead of stacking overlapping requests, and it adds up to 600ms of random jitter per tick so a class of tabs opened within the same minute doesn't phase-lock into synchronized bursts. `startRound(code, minutes)` and `endRound(code)` write new timing — both also update the *caller's own* local copy of the game state synchronously and return it, so the person clicking the button sees their own dashboard react instantly rather than waiting on a round trip. A poll already in flight when that happens can return the pre-write row; the engine tracks a local write watermark and refuses to apply a response that would move `round`/`startedAt` backward within 15s of one of our own writes. `derivePhase(game)` returns `"idle" | "countdown" | "live" | "ended"` purely from comparing `Date.now()` against the game's stored timestamps.
+- **`Engine.session`** — game codes and timing. `createGame(retireCode?)` generates a 4-character code (avoiding visually ambiguous characters: no `0/O/1/I/L`) and creates the `Games` row; pass the outgoing code as `retireCode` when deliberately switching games so the backend retires it in the same write — `host.html` does this only from "Start a different game (new code)", never from a plain "Start Round". `checkCode(code)` verifies a code exists and is not retired. `startPolling(code, intervalMs, onUpdate)` polls `getGame` and calls `onUpdate` with the latest game object (or `null` if the code doesn't exist). It reschedules itself *after* each response rather than on a fixed interval, so a slow backend backs off instead of stacking overlapping requests, and it adds up to 600ms of random jitter per tick so a class of tabs opened within the same minute doesn't phase-lock into synchronized bursts. `startRound(code, minutes)` and `endRound(code)` write new timing — both also update the *caller's own* local copy of the game state synchronously and return it, so the person clicking the button sees their own dashboard react instantly rather than waiting on a round trip. A poll already in flight when that happens can return the pre-write row; the engine tracks a local write watermark and refuses to apply a response that would move `round`/`startedAt` backward within 15s of one of our own writes. `derivePhase(game)` returns `"idle" | "countdown" | "live" | "ended"` purely from comparing `Date.now()` against the game's stored timestamps.
 - **`Engine.players`** — `pushProgress(fields)` upserts a live `Players` row; `saveRun(payload)` appends a permanent `Runs` row; `getPlayers(code, round)` reads the live scoreboard.
 - **`Engine.leaderboard.get(opts)`** — reads `Runs`. `opts` can be a plain number (legacy: just a limit), or `{limit, code, round}`.
 - **`Engine.round`** — the student-side local clock (added September 2026, see the timing model below). `plan(game)` takes the game row a poll just handed us and decides how *this* device should run the round, returning `{round, countdownEnd, playEnd, late, secondsAvailable}` or `null` if there's nothing to join. `runCountdown(countdownEnd, onTick, onDone)` runs a purely local countdown with no network in the loop and returns a handle with `.cancel()`.
@@ -121,7 +123,7 @@ A new game's own HTML owns everything about *what the game actually is* — cont
 5. **End Round Now** force-ends a round early if needed.
 6. Once a round ends, **Show Round Results** opens a dedicated podium-style results screen (top 3 highlighted, rest ranked below) meant to be left projected. It first shows a short tabulating animation — that isn't decoration, it's the window in which the last students' `saveRun` writes land, so nobody gets left off the podium. It stops as soon as the scoreboard stops changing (min 2.6s, hard cap 9s). **Start Next Round** is on that screen too.
 7. **View history** on the dashboard has three tabs: **This Round** (the round that just ended), **This Game** (every round played under the current code), **All Games** (all-time across every code ever run for this game).
-8. **Start a different game (new code)** retires the current code and generates a fresh one — use this for a new class period.
+8. **Start a different game (new code)** retires the current code and generates a fresh one — use this for a new class period. Retiring is immediate and active: students still on the old code get bounced back to registration within a poll cycle (1.5s) with "Your teacher started a new game," rather than sitting in a lobby that will never start. Starting another round on the *same* code (steps 4/6) never does this.
 
 ## 7. Creating a new game on this platform
 
@@ -161,6 +163,7 @@ Clean JSON back means the backend itself is healthy and any remaining problem is
 - **Apps Script has a real concurrency ceiling.** A full class (25-35 devices) all polling the same single Apps Script deployment adds up fast, especially with everyone opening the link at the same moment at the start of class. Under that load, round-trip time can spike well past the normal 1-2.5s, or a request can hang outright. Two symptoms traced back to this in September 2026: `host.html` sitting on "Loading…" for a long time on open, and a started round not actually reaching students (the host's own screen showed it as started from the optimistic local update, but the write that makes it real for everyone else silently failed and nothing said so). `engine.js`'s resilience changes (below) reduce how often this bites and make it visible when it does, but the underlying ceiling is still there.
 - **Sheet size over time.** Everything (roster, live game state, all-time history) lives in one Sheet. If `Runs` grows very large over a school year, consider periodically archiving old rows into a second tab — no code changes needed to do this.
 - **Never displayed on shared screens:** raw student ID numbers. Only `display_name` should ever appear on a projected view.
+- **Stale cached codes.** `skew-the-feed/index.html` caches its game code in `localStorage` with a timestamp and only auto-resumes into the lobby if it's under 4 hours old; older than that, or explicit `retired: true` from the backend (host clicked "Start a different game"), bounces the student back to registration instead of leaving them polling a code that will never start. A "Switch game code" link on the briefing/lobby screens covers the gap in between (e.g. two periods getting fresh codes within the same few hours).
 
 ### Client-side resilience in `engine.js` (added September 2026)
 

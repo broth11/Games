@@ -406,7 +406,12 @@
   function hostCreateGame(){
     if (state.hostCreating) return;
     state.hostCreating = true; state.hostCreateError = ""; render();
-    Engine.session.createGame().then(function(code){
+    // state.hostCode is "" on the very first code of a session (nothing to
+    // retire) and holds the current code when this runs via "Start a
+    // different game" — passing it tells the backend to retire that old
+    // code in the same write, so students on it get kicked back to
+    // register within a poll cycle instead of waiting on it forever.
+    Engine.session.createGame(state.hostCode || undefined).then(function(code){
       state.hostCreating = false; state.hostCode = code; state.hostChecked = false;
       state.hostDurationMinutes = DEFAULT_MINUTES;
       lsSet("skewfeed_host_code", code);

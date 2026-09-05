@@ -664,12 +664,15 @@
      Everything between those two moments runs off the local clock.
   ----------------------------------------------------------------*/
   function startGamePolling(code){
-    Engine.session.startPolling(code, POLL_MS, function(game){
+    Engine.session.startPolling(code, POLL_MS, function(game, meta){
       state.game = game;
+      meta = meta || {};
 
       if (!game && (state.screen==="lobby" || state.screen==="briefing")){
         forgetCode();
-        state.joinError = "That game code isn't active anymore — ask your teacher for the current code.";
+        state.joinError = meta.retired
+          ? "Your teacher started a new game — enter the new code."
+          : "That game code isn't active anymore — ask your teacher for the current code.";
         state.screen = "register"; render();
         return;
       }

@@ -119,10 +119,17 @@
     return "ended";
   }
 
-  function createGame() {
+  // retireCode is optional — pass the CURRENT code when the host is
+  // deliberately switching games ("new code" action) so the backend
+  // marks it dead in the same write that creates the new one. Omit it
+  // for the very first code of a session, where there's nothing to
+  // retire yet.
+  function createGame(retireCode) {
     var code = generateCode();
-    return apiPost("createGame", { code: code, gameType: CONFIG.gameType }).then(function (res) {
-      if (res && res.error === "code_exists") return createGame();
+    var body = { code: code, gameType: CONFIG.gameType };
+    if (retireCode) body.retireCode = retireCode;
+    return apiPost("createGame", body).then(function (res) {
+      if (res && res.error === "code_exists") return createGame(retireCode);
       if (res && res.ok) return code;
       throw new Error((res && res.error) || "create_failed");
     });
@@ -130,7 +137,7 @@
 
   function checkCode(code) {
     return apiGet("getGame", { code: code }).then(function (game) {
-      return game && game.exists;
+      return !!(game && game.exists && !game.retired);
     });
   }
 
@@ -157,6 +164,12 @@
   // stacking overlapping requests. The random jitter keeps 30 tabs
   // opened in the same 20 seconds from phase-locking into synchronized
   // bursts against a backend with a real concurrency ceiling.
+  // A retired code (see createGame's retireCode) still `exists` in the
+  // sheet — it's just marked dead by the host's OWN move to a different
+  // code, as opposed to simply never having been created. onUpdate's
+  // second argument distinguishes the two so a caller (a student page)
+  // can tell "this code was never valid" apart from "your teacher moved
+  // everyone to a new code" and say something more useful than generic.
   function startPolling(code, intervalMs, onUpdate) {
     stopPolling();
     var base = intervalMs || 2000;
@@ -164,10 +177,11 @@
       var mySeq = ++pollSeq;
       apiGet("getGame", { code: code }).then(function (game) {
         if (mySeq !== pollSeq) return;
-        var next = (game && game.exists) ? game : null;
-        if (isStaleAgainstLocalWrite(next)) { onUpdate(currentGame); return; }
+        var retired = !!(game && game.retired);
+        var next = (game && game.exists && !retired) ? game : null;
+        if (isStaleAgainstLocalWrite(next)) { onUpdate(currentGame, { retired: false }); return; }
         currentGame = next;
-        onUpdate(currentGame);
+        onUpdate(currentGame, { retired: retired });
       }).catch(function () { /* transient hiccup — next tick retries */ })
         .then(function () {
           pollTimer = setTimeout(tick, base + Math.random() * 600);
