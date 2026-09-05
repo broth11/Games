@@ -73,7 +73,9 @@
   .ticker-name{font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .ticker-score{font-family:"IBM Plex Mono",monospace; font-weight:600;}
   .empty-note{color:var(--ink-soft); font-size:13px; font-style:italic;}
-  .link-quiet{background:none; border:none; color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; font-size:12px; text-decoration:underline; cursor:pointer; padding:6px 0;}
+  .link-quiet{display:inline-flex; align-items:center; gap:6px; background:var(--card-2); border:1.5px solid var(--rule); color:var(--ink); font-family:"IBM Plex Mono",monospace; font-size:13.5px; font-weight:500; text-decoration:none; cursor:pointer; padding:11px 18px; border-radius:20px; transition:border-color .12s, background .12s;}
+  .link-quiet:hover, .link-quiet:focus-visible{border-color:var(--flag); color:var(--flag);}
+  .link-quiet:active{transform:scale(0.98);}
   .pulse-dot{display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--flag); margin-right:8px; animation:pulseDot 1.4s ease-in-out infinite;}
   @keyframes pulseDot{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
   .lobby-status{display:flex; align-items:center; font-family:"IBM Plex Mono",monospace; font-size:13px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em;}
@@ -113,11 +115,12 @@
   .stamp.wrong{color:var(--flag); background:var(--flag-ink);}
   .explain{background:var(--card); border:1px solid var(--rule); border-top:none; border-radius:0 0 10px 10px; margin-top:-1px; padding:14px 16px 16px; font-size:14.5px; color:var(--ink-soft); display:none;}
   .explain.show{display:block;} .explain b{color:var(--ink);}
-  .verdicts{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:18px;}
-  .verdict-btn{padding:14px 10px; border-radius:6px; border:1.5px solid var(--rule); background:var(--card); color:var(--ink); cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:3px; transition:border-color .12s, transform .08s;}
+  .verdicts{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px;}
+  .verdict-btn{padding:18px 14px; border-radius:8px; border:2px solid var(--rule); background:var(--card); color:var(--ink); cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:5px; transition:border-color .12s, transform .08s; min-height:64px;}
   .verdict-btn:active{transform:scale(0.98);}
-  .verdict-btn .vlabel{font-weight:700; font-size:14.5px;} .verdict-btn .vsub{font-size:11.5px; color:var(--ink-soft);}
-  .verdict-btn .vbar{width:22px; height:4px; border-radius:2px; margin-bottom:2px;}
+  .verdict-btn:hover, .verdict-btn:focus-visible{border-color:var(--ink);}
+  .verdict-btn .vlabel{font-weight:700; font-size:16.5px;} .verdict-btn .vsub{font-size:12.5px; color:var(--ink-soft);}
+  .verdict-btn .vbar{width:26px; height:5px; border-radius:3px; margin-bottom:3px;}
   .verdict-btn[data-cat="under"] .vbar{background:var(--under);}
   .verdict-btn[data-cat="nonresponse"] .vbar{background:var(--nonresp);}
   .verdict-btn[data-cat="voluntary"] .vbar{background:var(--voluntary);}
@@ -144,7 +147,8 @@
   .rank-badge{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:600; background:var(--card-2); color:var(--ink-soft);}
   .rank-badge.top{background:var(--flag); color:var(--flag-ink);}
   .lb-empty{padding:30px 10px; text-align:center; color:var(--ink-soft); font-size:14px;}
-  .backlink{display:inline-block; margin-bottom:14px; font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft); text-decoration:none; cursor:pointer; background:none; border:none; padding:0;}
+  .backlink{display:inline-flex; align-items:center; gap:6px; margin-bottom:14px; background:var(--card-2); border:1.5px solid var(--rule); border-radius:20px; font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:500; color:var(--ink); text-decoration:none; cursor:pointer; padding:9px 16px;}
+  .backlink:hover, .backlink:focus-visible{border-color:var(--flag); color:var(--flag);}
   .foot-note{text-align:center; margin-top:26px; font-size:11px; color:var(--ink-soft);}
   .code-input{text-transform:uppercase; text-align:center; letter-spacing:.3em; font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:22px !important;}
 </style>
@@ -688,7 +692,15 @@
         if (Date.now() >= state.localPlayEnd){ finishRun(); render(); return; }
       }
 
-      if (state.screen === "briefing" || state.screen === "lobby"){
+      // Any screen that isn't actively mid-round should notice a new round
+      // starting — not just the lobby/briefing. Someone who clicked "View
+      // the Wire" from results, or is still looking at their score, is
+      // just as much "waiting for the next shift" as someone in the
+      // lobby; they were previously stuck on that screen forever if the
+      // host started the next round while they were there. enterRound()
+      // itself no-ops if this isn't actually a new round (game.round ===
+      // state.joinedRound), so this is safe to check from anywhere idle.
+      if (state.screen !== "play" && state.screen !== "countdown" && state.screen !== "register"){
         var phase = Engine.session.derivePhase(game);
         if (phase === "countdown" || phase === "live"){ enterRound(game); return; }
         if (state.screen === "lobby") render();
