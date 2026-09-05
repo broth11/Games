@@ -237,13 +237,23 @@
        { round, countdownEnd, playEnd, late, secondsAvailable }
      countdownEnd === 0 means "no countdown, start immediately".
   ----------------------------------------------------------------*/
-  function planRound(game) {
+  // forceOnTime skips the "did we hear in time" check entirely and always
+  // gives an on-time countdown + full duration. Used for anyone who has
+  // already joined at least one round this session (a restart, or the
+  // normal next-round handoff) — they're actively connected and polling,
+  // so there's no ambiguity about whether the round "really just
+  // started" the way there is for a fresh registration mid-round. Without
+  // this, a student could occasionally miss the 5s countdown window
+  // purely from poll-timing/backend latency and get silently skipped
+  // past the shared countdown moment everyone else in the room sees.
+  function planRound(game, forceOnTime) {
     if (!game || !game.exists || !game.gameEndsAt) return null;
     var now = Date.now();
     if (now >= game.gameEndsAt) return null; // round's over
 
-    if (now < game.countdownEndsAt) {
-      // Heard in time — our own clean countdown, then the full duration.
+    if (forceOnTime || now < game.countdownEndsAt) {
+      // Heard in time (or we're forcing it) — our own clean countdown,
+      // then the full duration.
       var cd = now + COUNTDOWN_MS;
       return {
         round: game.round,
@@ -254,7 +264,8 @@
       };
     }
 
-    // Late joiner — no countdown, share the room's finish line.
+    // Late joiner (first-ever round for this device, heard about it well
+    // after it started) — no countdown, share the room's finish line.
     return {
       round: game.round,
       countdownEnd: 0,

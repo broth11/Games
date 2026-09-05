@@ -393,7 +393,15 @@
   ----------------------------------------------------------------*/
   function enterRound(game){
     if (!game || game.round === state.joinedRound) return;
-    var plan = Engine.round.plan(game);
+    // Already played at least one round this session (a restart, or the
+    // normal next-round handoff) → always show the countdown, don't risk
+    // the "late joiner" path just because a poll happened to land late.
+    // Only a genuinely fresh join (first round ever for this device,
+    // state.joinedRound still -1) can land in the middle of a round
+    // that's already been running a while, where skipping the countdown
+    // is the right call.
+    var alreadyPlaying = state.joinedRound !== -1;
+    var plan = Engine.round.plan(game, alreadyPlaying);
     if (!plan) return;
 
     state.joinedRound     = plan.round;
