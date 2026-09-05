@@ -31,6 +31,7 @@
   .mono{font-family:"IBM Plex Mono","SF Mono",monospace; font-variant-numeric:tabular-nums;}
   a{color:inherit;} button{font-family:inherit;}
   :focus-visible{outline:3px solid var(--focus); outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
   .wrap{max-width:820px; margin:0 auto; padding:28px 18px 60px;}
   .masthead{text-align:center; margin-bottom:22px;}
   .kicker{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;}
@@ -79,18 +80,31 @@
   .results-kicker{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.2em; text-transform:uppercase; opacity:.6; margin-bottom:6px;}
   .results-title{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(30px,6vw,44px); text-transform:uppercase; margin:0 0 26px;}
   .podium{display:flex; align-items:flex-end; justify-content:center; gap:14px; margin-bottom:30px;}
-  .podium-slot{display:flex; flex-direction:column; align-items:center; gap:8px; width:120px;}
+  .podium-slot{display:flex; flex-direction:column; align-items:center; gap:8px; width:120px; animation:riseIn .5s cubic-bezier(.2,.8,.3,1) both;}
+  .podium-slot:nth-child(1){animation-delay:.05s;}
+  .podium-slot:nth-child(2){animation-delay:.35s;}
+  .podium-slot:nth-child(3){animation-delay:.2s;}
+  @keyframes riseIn{ from{opacity:0; transform:translateY(26px);} to{opacity:1; transform:translateY(0);} }
   .podium-slot .p-name{font-weight:700; font-size:14px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .podium-slot .p-score{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:15px; color:#E8615C;}
   .podium-bar{width:100%; border-radius:6px 6px 0 0; display:flex; align-items:flex-start; justify-content:center; padding-top:8px; font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:26px;}
   .podium-slot.rank-1 .podium-bar{height:120px; background:#E8615C; color:#241110;}
   .podium-slot.rank-2 .podium-bar{height:90px; background:#8A9A93; color:#12100E;}
   .podium-slot.rank-3 .podium-bar{height:66px; background:#6D5A45; color:#F6F1E4;}
-  .results-rest{max-width:420px; margin:0 auto; text-align:left;}
+  .results-rest{max-width:420px; margin:0 auto; text-align:left; animation:riseIn .5s ease-out .5s both;}
   .results-row{display:flex; justify-content:space-between; padding:7px 4px; border-bottom:1px solid rgba(246,241,228,0.15); font-size:14px;}
   .results-row .r-rank{font-family:"IBM Plex Mono",monospace; opacity:.55; width:26px; flex:none;}
   .results-row .r-score{font-family:"IBM Plex Mono",monospace; font-weight:600;}
   .results-empty{opacity:.6; padding:20px 0; font-family:"IBM Plex Mono",monospace; font-size:13px;}
+
+  /* ---- TABULATING ---- */
+  .tally{padding:40px 20px 34px; text-align:center;}
+  .tally-num{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(56px,13vw,104px); line-height:1; color:#E8615C; font-variant-numeric:tabular-nums;}
+  .tally-cap{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.18em; text-transform:uppercase; opacity:.45; margin-top:2px;}
+  .tally-label{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.22em; text-transform:uppercase; opacity:.6; margin-top:18px; min-height:16px;}
+  .tally-wire{max-width:340px; margin:20px auto 0; height:3px; background:rgba(246,241,228,0.14); border-radius:2px; overflow:hidden;}
+  .tally-wire span{display:block; height:100%; width:38%; background:#E8615C; border-radius:2px; animation:wireRun 1.15s ease-in-out infinite;}
+  @keyframes wireRun{ 0%{transform:translateX(-110%);} 100%{transform:translateX(320%);} }
 
   /* ================= HISTORY ================= */
   .history-tabs{display:flex; gap:8px; margin-bottom:4px; flex-wrap:wrap;}
@@ -113,16 +127,24 @@
 
   var DEFAULT_MINUTES = 5;
   var SCORE_REFRESH_MS = 15000;
+  var HOST_POLL_MS = 3000;   // the host writes state; it barely needs to read it
+  var CLOCK_TICK_MS = 250;   // purely local — the clock never waits on a request
+
+  // Tabulating screen: students finish a beat apart because each device
+  // runs its own local clock, so give their saveRun writes a moment to
+  // land before we freeze the podium.
+  var TALLY_MIN_MS  = 2600;
+  var TALLY_MAX_MS  = 9000;
+  var TALLY_POLL_MS = 1200;
 
   var state = {
     hostCode: "", hostChecked: false, hostCreating: false, hostCreateError: "",
     game: null, hostDurationMinutes: DEFAULT_MINUTES,
     playersShown: [],
     screen: "dashboard",       // dashboard | results | history
-    resultsRound: null, resultsRows: [], resultsLoading: false,
+    resultsRound: null, resultsRows: [], resultsLoading: false, tallySeen: 0,
     historyTab: "round",       // round | game | all
-    historyRows: [], historyLoading: false,
-    writeError: ""             // set when a start/end-round write fails after all retries
+    historyRows: [], historyLoading: false
   };
 
   function lsGet(k){ try{ return localStorage.getItem(k)||""; }catch(e){ return ""; } }
@@ -130,19 +152,6 @@
   function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
   state.hostCode = lsGet("skewfeed_host_code");
-
-  // Paint the dashboard from the last game state we actually heard back
-  // from the server, instead of a bare "Loading…" — Apps Script under a
-  // full class's worth of concurrent polling can take a while to answer
-  // the very first request, and there's no reason to stare at a blank
-  // screen when we already know roughly where things stood a moment ago.
-  // The live poll (below) still runs immediately and replaces this the
-  // instant a fresh answer comes back.
-  if (state.hostCode) {
-    var cachedGame = null;
-    try { cachedGame = JSON.parse(lsGet("skewfeed_last_game_" + state.hostCode) || "null"); } catch (e) { cachedGame = null; }
-    if (cachedGame) { state.game = cachedGame; state.hostChecked = true; }
-  }
 
   function masthead(kicker){
     return '<div class="masthead"><div class="kicker">'+esc(kicker||"AP STATISTICS · UNIT 1 FIELD EXERCISE")+'</div>' +
@@ -216,8 +225,7 @@
         '<button class="btn btn-flag" id="hostStartBtn" style="margin-top:16px;" '+(running?"disabled":"")+'>'+(phase==="ended"?"Start Next Round":"Start Round")+'</button>' +
         '<button class="btn btn-ghost" id="hostEndBtn" style="margin-top:10px; display:'+(running?"block":"none")+';">End Round Now</button>' +
         (phase==="ended" ? '<button class="btn btn-ghost" id="showResultsBtn" style="margin-top:10px;">Show Round Results</button>' : '') +
-        (state.writeError ? '<div class="err" style="min-height:auto; margin-top:10px;">'+esc(state.writeError)+' <button class="link-quiet" id="retryWriteBtn" style="display:inline; margin:0;">Retry</button></div>' : '') +
-        '<p class="host-note">Every device with this code gets a 5-second countdown mask, then plays together for the length you set above. Everyone still moves through posts at their own pace &mdash; the clock is just shared.</p>' +
+        '<p class="host-note">Every device gets its own 5-second countdown the moment it hears the round start, then the full time you set. Anyone joining after that gets whatever time is left on this clock.</p>' +
       '</div>' +
       '<div class="card" style="margin-top:16px;">' +
         '<p class="eyebrow" style="margin:0 0 4px;">Live Scoreboard &mdash; this round</p>' +
@@ -236,53 +244,114 @@
   }
 
   /* ---------------------------------------------------------------
-     RESULTS CUTSCENE — a dedicated screen the host can project once
-     a round ends, pulling a fresh final read of that round's scores
-     from the Players tab (not the 15s-stale cache the dashboard uses).
+     RESULTS CUTSCENE — the tabulating screen is functional, not just
+     decoration: it covers the couple of seconds in which the last
+     students' saveRun writes land, so nobody gets left off the podium.
   ----------------------------------------------------------------*/
+  var tallyTimer = null;
+
   function openResults(){
     state.screen = "results";
     state.resultsRound = state.game ? state.game.round : null;
     state.resultsRows = [];
     state.resultsLoading = true;
+    state.tallySeen = 0;
     render();
-    if (!state.hostCode || state.resultsRound == null) { state.resultsLoading = false; render(); return; }
-    Engine.players.getPlayers(state.hostCode, state.resultsRound).then(function(rows){
-      state.resultsRows = rows || [];
-      state.resultsLoading = false;
-      render();
-    }).catch(function(){ state.resultsLoading = false; render(); });
+    startTallyAnimation();
+
+    if (!state.hostCode || state.resultsRound == null){
+      stopTallyAnimation(); state.resultsLoading = false; render(); return;
+    }
+
+    var started = Date.now(), stableFor = 0, lastSig = "", best = [];
+
+    function poll(){
+      Engine.players.getPlayers(state.hostCode, state.resultsRound).then(function(rows){
+        rows = rows || [];
+        if (rows.length >= best.length) best = rows;   // never let a flaky read drop someone
+        state.tallySeen = best.length;
+        var sig = rows.length + ":" + rows.map(function(r){ return r.studentId + "-" + r.score; }).join(",");
+        stableFor = (sig === lastSig) ? stableFor + TALLY_POLL_MS : 0;
+        lastSig = sig;
+        decide();
+      }).catch(decide);
+    }
+
+    function decide(){
+      var elapsed = Date.now() - started;
+      var settled = (stableFor >= TALLY_POLL_MS * 2) && best.length > 0;
+      if (elapsed >= TALLY_MAX_MS || (settled && elapsed >= TALLY_MIN_MS)){
+        stopTallyAnimation();
+        state.resultsRows = best;
+        state.resultsLoading = false;
+        render();
+      } else {
+        setTimeout(poll, TALLY_POLL_MS);
+      }
+    }
+
+    poll();
+  }
+
+  function startTallyAnimation(){
+    stopTallyAnimation();
+    var phrases = ["Closing the wire", "Collecting filings", "Checking the numbers", "Setting the front page"];
+    var shown = 0, ticks = 0;
+    tallyTimer = setInterval(function(){
+      var target = state.tallySeen || 0;
+      if (shown < target) shown += Math.max(1, Math.ceil((target - shown) / 4));
+      var n = document.getElementById("tallyNum");
+      if (n) n.textContent = shown;
+      if (++ticks % 14 === 0){
+        var l = document.getElementById("tallyLabel");
+        if (l) l.textContent = phrases[(ticks / 14) % phrases.length];
+      }
+    }, 90);
+  }
+
+  function stopTallyAnimation(){
+    if (tallyTimer){ clearInterval(tallyTimer); tallyTimer = null; }
   }
 
   function viewResults(){
-    var rows = state.resultsRows;
-    var top3 = rows.slice(0, 3);
-    var rest = rows.slice(3);
-    var order = [1, 0, 2]; // display order: 2nd, 1st, 3rd — classic podium layout
-    var podium = top3.length ? '<div class="podium">' + order.map(function(i){
-      var r = top3[i];
-      if (!r) return "";
-      var rank = i + 1;
-      return '<div class="podium-slot rank-'+rank+'"><div class="p-name">'+esc(r.displayName)+'</div><div class="p-score">'+r.score+'</div>' +
-        '<div class="podium-bar">'+rank+'</div></div>';
-    }).join("") + '</div>' : '';
-    var restHtml = rest.length ? '<div class="results-rest">' + rest.map(function(r,i){
-      return '<div class="results-row"><span class="r-rank">'+(i+4)+'</span><span>'+esc(r.displayName)+'</span><span class="r-score">'+r.score+'</span></div>';
-    }).join("") + '</div>' : '';
-    var body = state.resultsLoading ? '<div class="results-empty">Tallying the final wire&hellip;</div>' :
-      (!rows.length ? '<div class="results-empty">No scores reported for this round.</div>' : podium + restHtml);
+    var body;
+    if (state.resultsLoading){
+      body = '<div class="tally">' +
+        '<div class="tally-num mono" id="tallyNum">0</div>' +
+        '<div class="tally-cap">Filings in</div>' +
+        '<div class="tally-label" id="tallyLabel">Closing the wire</div>' +
+        '<div class="tally-wire"><span></span></div>' +
+      '</div>';
+    } else {
+      var rows = state.resultsRows;
+      var top3 = rows.slice(0, 3);
+      var rest = rows.slice(3);
+      var order = [1, 0, 2]; // display order: 2nd, 1st, 3rd — classic podium layout
+      var podium = top3.length ? '<div class="podium">' + order.map(function(i){
+        var r = top3[i];
+        if (!r) return "";
+        var rank = i + 1;
+        return '<div class="podium-slot rank-'+rank+'"><div class="p-name">'+esc(r.displayName)+'</div><div class="p-score">'+r.score+'</div>' +
+          '<div class="podium-bar">'+rank+'</div></div>';
+      }).join("") + '</div>' : '';
+      var restHtml = rest.length ? '<div class="results-rest">' + rest.map(function(r,i){
+        return '<div class="results-row"><span class="r-rank">'+(i+4)+'</span><span>'+esc(r.displayName)+'</span><span class="r-score">'+r.score+'</span></div>';
+      }).join("") + '</div>' : '';
+      body = !rows.length ? '<div class="results-empty">No scores reported for this round.</div>' : podium + restHtml;
+    }
     return '' +
       '<button class="backlink" id="resultsBackBtn">&larr; Back to dashboard</button>' +
       '<div class="results-stage">' +
         '<div class="results-kicker">Round '+(state.resultsRound||0)+' &middot; Final Edition</div>' +
-        '<div class="results-title">The Results Are In</div>' +
+        '<div class="results-title">'+(state.resultsLoading ? "Tallying the Wire" : "The Results Are In")+'</div>' +
         body +
       '</div>' +
-      '<div style="text-align:center; margin-top:16px;"><button class="btn btn-flag" id="resultsNextBtn">Start Next Round</button></div>';
+      (state.resultsLoading ? '' :
+        '<div style="text-align:center; margin-top:16px;"><button class="btn btn-flag" id="resultsNextBtn">Start Next Round</button></div>');
   }
 
   /* ---------------------------------------------------------------
-     HISTORY — this round / this game (code) / all games (gameType)
+     HISTORY
   ----------------------------------------------------------------*/
   function openHistory(tab){
     state.screen = "history";
@@ -298,7 +367,7 @@
       opts = { code: state.hostCode, round: state.game.round };
     } else if (state.historyTab === "game"){
       opts = { code: state.hostCode };
-    } // "all" — no code filter, all games of this gameType
+    }
     Engine.leaderboard.get(opts).then(function(rows){
       state.historyRows = rows || []; state.historyLoading = false; render();
     }).catch(function(){ state.historyLoading = false; render(); });
@@ -357,35 +426,20 @@
     if (!mins || mins < 1) mins = DEFAULT_MINUTES;
     if (mins > 20) mins = 20;
     state.hostDurationMinutes = mins;
-    state.writeError = "";
-    // startRound() updates Engine's internal game state synchronously and
-    // returns it immediately — render on THAT rather than waiting for the
-    // next poll, so the host's own screen reacts the instant they click,
-    // with no lag from the Apps Script round trip. The write to the
-    // server (which is what makes it real for every student device)
-    // happens in the background with its own retries; onError below only
-    // fires if every one of those retries fails.
-    var game = Engine.session.startRound(state.hostCode, mins, {
-      onError: function(){
-        state.writeError = "Couldn't confirm the round started with the server — students may not see it. Check your connection, then retry.";
-        render();
-      }
-    });
-    state.game = game; lastRound = game.round; state.playersShown = [];
+    stopTallyAnimation();
+    // startRound() updates Engine's state synchronously and returns it,
+    // so the host's own screen reacts on the click with no round trip.
+    var game = Engine.session.startRound(state.hostCode, mins);
+    state.game = game; lastRound = game.round; lastLocalPhase = null;
+    state.playersShown = [];
     state.screen = "dashboard";
     render();
   }
 
   function hostEndRound(){
     if (!state.hostCode) return;
-    state.writeError = "";
-    var game = Engine.session.endRound(state.hostCode, {
-      onError: function(){
-        state.writeError = "Couldn't confirm the round ended with the server. Check your connection, then retry.";
-        render();
-      }
-    });
-    state.game = game;
+    var game = Engine.session.endRound(state.hostCode);
+    state.game = game; lastLocalPhase = null;
     render();
   }
 
@@ -394,6 +448,7 @@
     if (scoreTimer) return;
     scoreTimer = setInterval(function(){
       if (!state.hostCode || !state.game) return;
+      if (state.screen !== "dashboard") return;   // results screen runs its own poll
       Engine.players.getPlayers(state.hostCode, state.game.round).then(function(rows){
         state.playersShown = rows || [];
         var wrap = document.getElementById("hostScoreWrap");
@@ -420,31 +475,41 @@
     if (durationBlock) durationBlock.style.display = running ? "none" : "block";
   }
 
+  /* ---------------------------------------------------------------
+     LOCAL CLOCK — derivePhase() and clockText() are pure functions of
+     Date.now() against timestamps we already hold, so the dashboard
+     clock has no business waiting on a poll. This ticks it locally at
+     4fps; polling is now only for state we DIDN'T originate.
+  ----------------------------------------------------------------*/
+  var lastLocalPhase = null;
+  setInterval(function(){
+    if (state.screen !== "dashboard" || !state.hostChecked || !state.game) return;
+    var phase = Engine.session.derivePhase(state.game);
+    if (phase !== lastLocalPhase){
+      lastLocalPhase = phase;
+      render();   // phase pill, buttons and "Show Round Results" all flip together
+      return;
+    }
+    updateClockUI();
+  }, CLOCK_TICK_MS);
+
   var lastRound = null;
-  var lastPhase = null;
   function startPolling(code){
-    // 2.5s rather than 1s: Apps Script's own round trip already runs
-    // 1-2.5s, so polling faster than that just piles up concurrent
-    // requests (worse for everyone) without students seeing anything
-    // sooner in practice.
-    Engine.session.startPolling(code, 2500, function(game){
+    Engine.session.startPolling(code, HOST_POLL_MS, function(game){
       state.game = game; state.hostChecked = true;
-      if (game) lsSet("skewfeed_last_game_" + code, JSON.stringify(game));
       if (!game){
-        // stored code no longer exists (sheet cleared, new deployment, etc.)
-        state.hostCode = ""; lsSet("skewfeed_host_code",""); lsSet("skewfeed_last_game_" + code, "");
+        state.hostCode = ""; lsSet("skewfeed_host_code","");
         render();
         return;
       }
-      var phase = Engine.session.derivePhase(game);
       var roundChanged = game.round !== lastRound;
-      var phaseChanged = phase !== lastPhase;
-      lastRound = game.round; lastPhase = phase;
-      if (roundChanged) state.playersShown = [];
-      if ((roundChanged || phaseChanged) && state.screen === "dashboard") {
-        render(); // full re-render so the phase pill, buttons, and "Show Results" link all stay in sync
-      } else if (document.getElementById("hostPhasePill")) {
-        updateClockUI();
+      lastRound = game.round;
+      if (roundChanged){
+        state.playersShown = [];
+        lastLocalPhase = null;
+        render();
+      } else if (!document.getElementById("hostPhasePill") && state.screen === "dashboard"){
+        render();   // first paint after boot
       }
       ensureScoreLoop();
     });
@@ -455,17 +520,11 @@
     if ((el = document.getElementById("hostCreateBtn"))) el.addEventListener("click", hostCreateGame);
     if ((el = document.getElementById("hostStartBtn"))) el.addEventListener("click", hostStartRound);
     if ((el = document.getElementById("hostEndBtn"))) el.addEventListener("click", hostEndRound);
-    if ((el = document.getElementById("retryWriteBtn"))) el.addEventListener("click", function(){
-      Engine.session.retryFailedWrite({
-        onSuccess: function(){ state.writeError = ""; render(); },
-        onError: function(){ state.writeError = "Still couldn't reach the server. Check your connection, then retry."; render(); }
-      });
-    });
     if ((el = document.getElementById("showResultsBtn"))) el.addEventListener("click", openResults);
-    if ((el = document.getElementById("resultsBackBtn"))) el.addEventListener("click", function(){ state.screen = "dashboard"; render(); });
+    if ((el = document.getElementById("resultsBackBtn"))) el.addEventListener("click", function(){ stopTallyAnimation(); state.screen = "dashboard"; lastLocalPhase = null; render(); });
     if ((el = document.getElementById("resultsNextBtn"))) el.addEventListener("click", hostStartRound);
     if ((el = document.getElementById("historyBtn"))) el.addEventListener("click", function(){ openHistory(); });
-    if ((el = document.getElementById("historyBackBtn"))) el.addEventListener("click", function(){ state.screen = "dashboard"; render(); });
+    if ((el = document.getElementById("historyBackBtn"))) el.addEventListener("click", function(){ state.screen = "dashboard"; lastLocalPhase = null; render(); });
     Array.prototype.forEach.call(document.querySelectorAll(".tab-btn"), function(tabBtn){
       tabBtn.addEventListener("click", function(){ openHistory(tabBtn.getAttribute("data-tab")); });
     });

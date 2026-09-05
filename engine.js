@@ -3,13 +3,26 @@
  * ---------------------------------------------------------
  * Talks to the Apps Script + Google Sheet backend so any game built on
  * top of this file gets, for free: student-ID identity (no accounts),
- * game codes, a host-controlled synchronized countdown + round timer,
+ * game codes, a host-controlled round with a LOCAL lag-free countdown,
  * and a live scoreboard / all-time leaderboard.
  *
- * A game page includes this file, calls Engine.configure(...) once,
- * then uses Engine.identity / Engine.session / Engine.players /
- * Engine.leaderboard. The game itself owns its content, scoring rules,
- * and play-screen UI — this file only owns sync + identity.
+ * TIMING MODEL (changed September 2026 — see PROJECT-HANDOFF.md §5)
+ * ---------------------------------------------------------
+ * Previously every device counted down to a single shared timestamp, so
+ * a device that heard about the round late saw a truncated countdown and
+ * a shortened round. Now:
+ *
+ *   - A device that hears while the round is still in its countdown
+ *     window runs its OWN 5s countdown from the moment it heard, then
+ *     plays the full durationSec. Nothing in that path touches the
+ *     network, so the countdown animation is perfectly smooth no matter
+ *     how congested the backend is.
+ *   - A device that hears after the countdown window (a late joiner)
+ *     skips the countdown and plays whatever time is left on the room's
+ *     shared clock — join a 5-minute round a minute late, get 4 minutes.
+ *
+ * The cost is that on-time devices finish a second or two apart rather
+ * than in lockstep. That's covered by the host's tabulating screen.
  */
 (function (global) {
   "use strict";
@@ -34,56 +47,8 @@
      POST uses text/plain to stay a CORS "simple request" (Apps Script
      has no OPTIONS/preflight handler, so a JSON content-type would
      otherwise be blocked by the browser before it ever leaves).
-
-     A classroom-scale load (a whole class polling the same Apps
-     Script deployment once a second) can push its 1-2.5s normal
-     round trip much higher, or make it hang outright on a cold
-     start. Two things guard against that:
-       - REQUEST_TIMEOUT_MS aborts any single request that takes too
-         long, instead of leaving it to hang forever with nothing
-         ever resolving.
-       - withRetry() gives one-shot calls (login lookup, create game,
-         start/end round) a few attempts with backoff before giving
-         up, instead of failing silently on the first hiccup.
-     Steady polling deliberately opts OUT of retries (see
-     startPolling below) — the next tick a second later already
-     serves as the retry, so stacking retries on top of that would
-     only add more concurrent load to an already-overloaded backend.
   ----------------------------------------------------------------*/
-  var REQUEST_TIMEOUT_MS = 7000;
-  var DEFAULT_RETRIES = 2;      // up to 3 attempts total
-  var RETRY_BASE_DELAY_MS = 600;
-
-  function fetchJson(url, fetchOpts) {
-    var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
-    var timer = controller ? setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS) : null;
-    var opts = Object.assign({}, fetchOpts || {});
-    if (controller) opts.signal = controller.signal;
-    return fetch(url, opts).then(function (r) {
-      if (timer) clearTimeout(timer);
-      if (!r.ok) throw new Error("http_" + r.status);
-      return r.json();
-    }, function (err) {
-      if (timer) clearTimeout(timer);
-      throw err;
-    });
-  }
-
-  function delay(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
-
-  function withRetry(fn, retries, attempt) {
-    attempt = attempt || 0;
-    return fn().catch(function (err) {
-      if (attempt >= retries) throw err;
-      return delay(RETRY_BASE_DELAY_MS * Math.pow(1.8, attempt)).then(function () {
-        return withRetry(fn, retries, attempt + 1);
-      });
-    });
-  }
-
-  function apiGet(action, params, opts) {
-    opts = opts || {};
-    var retries = (opts.retries != null) ? opts.retries : DEFAULT_RETRIES;
+  function apiGet(action, params) {
     var url = CONFIG.appsScriptUrl + "?action=" + encodeURIComponent(action);
     if (params) {
       Object.keys(params).forEach(function (k) {
@@ -92,55 +57,20 @@
         }
       });
     }
-    return withRetry(function () { return fetchJson(url); }, retries);
+    return fetch(url).then(function (r) { return r.json(); });
   }
 
-  function apiPost(action, body, opts) {
-    opts = opts || {};
-    var retries = (opts.retries != null) ? opts.retries : DEFAULT_RETRIES;
+  function apiPost(action, body) {
     var payload = Object.assign({ action: action }, body || {});
-    return withRetry(function () {
-      return fetchJson(CONFIG.appsScriptUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload)
-      });
-    }, retries);
-  }
-
-  // Wraps a write so a caller can be told definitively whether it
-  // landed, and — if every retry is exhausted — can offer the user a
-  // manual "Retry" that resends the exact same payload rather than
-  // recomputing one (recomputing timestamps on retry is how a
-  // "double start" bug would sneak in).
-  var lastFailedWrite = null; // {action, body}
-
-  function writeWithRetry(action, body) {
-    return apiPost(action, body).then(function (res) {
-      lastFailedWrite = null;
-      return res;
-    }, function (err) {
-      lastFailedWrite = { action: action, body: body };
-      throw err;
-    });
-  }
-
-  function retryFailedWrite(callbacks) {
-    callbacks = callbacks || {};
-    if (!lastFailedWrite) return;
-    var w = lastFailedWrite;
-    writeWithRetry(w.action, w.body).then(function (res) {
-      if (callbacks.onSuccess) callbacks.onSuccess(res);
-    }, function (err) {
-      if (callbacks.onError) callbacks.onError(err);
-    });
+    return fetch(CONFIG.appsScriptUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); });
   }
 
   /* ---------------------------------------------------------------
-     IDENTITY — student ID is the login, no accounts. Once looked up
-     against the roster, the result is cached in localStorage so
-     returning on the same device is instant; the ID is always what's
-     typed and stored, never displayed back on a shared screen.
+     IDENTITY — student ID is the login, no accounts.
   ----------------------------------------------------------------*/
   var LS_PREFIX = "engine_";
   function lsGet(k) { try { return localStorage.getItem(LS_PREFIX + k) || ""; } catch (e) { return ""; } }
@@ -154,8 +84,6 @@
 
     isLoggedIn: function () { return !!(identity.studentId && identity.displayName); },
 
-    // Looks up a typed ID against the Students roster tab. Resolves
-    // {found:true, displayName, period} or {found:false}.
     lookup: function (id) {
       return apiGet("getStudent", { id: id }).then(function (res) {
         if (res && res.found) {
@@ -177,13 +105,11 @@
   };
 
   /* ---------------------------------------------------------------
-     SESSION — a "games/{code}" row. Phase is derived purely from
-     wall-clock comparisons against stored absolute timestamps, so
-     every device (including a late joiner or a reload) agrees on
-     the phase independently — no push events needed.
+     SESSION
   ----------------------------------------------------------------*/
   var pollTimer = null;
-  var currentGame = null; // last known {exists, code, round, durationSec, countdownEndsAt, gameEndsAt}
+  var currentGame = null;
+  var localWriteAt = 0; // wall-clock of our own last start/end write
 
   function derivePhase(game) {
     if (!game || !game.exists || !game.gameEndsAt) return "idle";
@@ -196,7 +122,7 @@
   function createGame() {
     var code = generateCode();
     return apiPost("createGame", { code: code, gameType: CONFIG.gameType }).then(function (res) {
-      if (res && res.error === "code_exists") return createGame(); // retry on the rare collision
+      if (res && res.error === "code_exists") return createGame();
       if (res && res.ok) return code;
       throw new Error((res && res.error) || "create_failed");
     });
@@ -208,92 +134,139 @@
     });
   }
 
-  // Apps Script round-trips run 1-2.5s, which is slower than a 1s poll
-  // interval — so responses CAN arrive out of order (a slow response to an
-  // older request landing after a faster response to a newer one). Each
-  // tick gets a rising sequence number; a response is applied only if it's
-  // still the most recent request in flight, so a late straggler can never
-  // overwrite fresher state.
+  // Responses can arrive out of order (Apps Script round-trips run
+  // 1-2.5s). Each tick gets a rising sequence number; a response is
+  // applied only if it's still the most recent request in flight.
   var pollSeq = 0;
 
+  // Would applying `next` move us BACKWARD relative to a write we just
+  // made ourselves? The host writes optimistically and locally before
+  // the network confirms, so a poll already in flight can come back
+  // carrying the pre-write row and briefly undo the host's own click.
+  function isStaleAgainstLocalWrite(next) {
+    if (!next || !currentGame || !localWriteAt) return false;
+    if (Date.now() - localWriteAt > 15000) return false; // long settled by now
+    if (next.round < currentGame.round) return true;
+    if (next.round === currentGame.round &&
+        (next.startedAt || 0) < (currentGame.startedAt || 0)) return true;
+    return false;
+  }
+
+  // Self-rescheduling rather than setInterval, so the gap is measured
+  // BETWEEN responses — a slow backend naturally backs off instead of
+  // stacking overlapping requests. The random jitter keeps 30 tabs
+  // opened in the same 20 seconds from phase-locking into synchronized
+  // bursts against a backend with a real concurrency ceiling.
   function startPolling(code, intervalMs, onUpdate) {
     stopPolling();
+    var base = intervalMs || 2000;
     function tick() {
       var mySeq = ++pollSeq;
-      // retries:0 — the next tick a couple seconds from now IS the retry;
-      // stacking real retries on top of the poll loop would only pile
-      // more concurrent requests onto a backend that's already slow.
-      apiGet("getGame", { code: code }, { retries: 0 }).then(function (game) {
-        if (mySeq !== pollSeq) return; // a newer request already finished — drop this stale one
-        currentGame = game && game.exists ? game : null;
+      apiGet("getGame", { code: code }).then(function (game) {
+        if (mySeq !== pollSeq) return;
+        var next = (game && game.exists) ? game : null;
+        if (isStaleAgainstLocalWrite(next)) { onUpdate(currentGame); return; }
+        currentGame = next;
         onUpdate(currentGame);
-      }).catch(function () { /* transient network hiccup — next tick retries */ });
+      }).catch(function () { /* transient hiccup — next tick retries */ })
+        .then(function () {
+          pollTimer = setTimeout(tick, base + Math.random() * 600);
+        });
     }
     tick();
-    pollTimer = setInterval(tick, intervalMs || 2500);
   }
 
   function stopPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
   }
 
-  // Both take effect on the CALLER's screen immediately (currentGame is
-  // updated synchronously, before the network write even resolves) so the
-  // host never has to sit and watch their own dashboard wait on a poll to
-  // reflect a button they just pressed. Other devices still learn about it
-  // on their next poll — that hop can't be eliminated without a push
-  // channel, which Apps Script doesn't offer — but the local wall-clock
-  // math means everyone still converges on the exact same start/end
-  // instant once they do hear about it, they just may join the countdown
-  // already a beat or two in rather than always seeing a clean "5".
-  // `callbacks` is optional: {onSuccess(res), onError(err)}. The local
-  // currentGame update and return happen synchronously either way (so the
-  // host's own screen still reacts instantly), but now the caller can
-  // also find out — after a few retries — whether the write that makes
-  // it real for every OTHER device actually landed, instead of that
-  // failure being swallowed silently.
-  function startRound(code, minutes, callbacks) {
-    callbacks = callbacks || {};
+  // Takes effect on the CALLER's screen immediately — currentGame is
+  // updated synchronously, before the network write resolves — so the
+  // host never watches their own dashboard wait on a poll.
+  function startRound(code, minutes) {
     var durationSec = Math.round(minutes * 60);
     var now = Date.now();
     var countdownEndsAt = now + COUNTDOWN_MS;
     var gameEndsAt = countdownEndsAt + durationSec * 1000;
     var round = (currentGame && currentGame.round ? currentGame.round : 0) + 1;
+    localWriteAt = now;
     currentGame = {
       exists: true, code: code, gameType: CONFIG.gameType, round: round,
       durationSec: durationSec, countdownEndsAt: countdownEndsAt, gameEndsAt: gameEndsAt, startedAt: now
     };
-    writeWithRetry("startRound", {
+    apiPost("startRound", {
       code: code, round: round, durationSec: durationSec,
       countdownEndsAt: countdownEndsAt, gameEndsAt: gameEndsAt
-    }).then(function (res) {
-      if (callbacks.onSuccess) callbacks.onSuccess(res);
-    }, function (err) {
-      if (callbacks.onError) callbacks.onError(err);
-    });
+    }).catch(function () {});
     return currentGame;
   }
 
-  function endRound(code, callbacks) {
-    callbacks = callbacks || {};
+  function endRound(code) {
     var now = Date.now();
+    localWriteAt = now;
     if (currentGame) {
       currentGame = Object.assign({}, currentGame, {
         gameEndsAt: now,
         countdownEndsAt: Math.min(currentGame.countdownEndsAt || now, now)
       });
     }
-    writeWithRetry("endRound", { code: code }).then(function (res) {
-      if (callbacks.onSuccess) callbacks.onSuccess(res);
-    }, function (err) {
-      if (callbacks.onError) callbacks.onError(err);
-    });
+    apiPost("endRound", { code: code }).catch(function () {});
     return currentGame;
   }
 
   /* ---------------------------------------------------------------
-     PLAYERS — per-round progress (for the host's live scoreboard)
-     and final Runs (for the all-time leaderboard).
+     ROUND — the student-side local clock. Any game can reuse this.
+
+     plan(game) decides, from the game row a poll just handed us, how
+     THIS device should run the round. Returns null if there's nothing
+     to join, otherwise:
+       { round, countdownEnd, playEnd, late, secondsAvailable }
+     countdownEnd === 0 means "no countdown, start immediately".
+  ----------------------------------------------------------------*/
+  function planRound(game) {
+    if (!game || !game.exists || !game.gameEndsAt) return null;
+    var now = Date.now();
+    if (now >= game.gameEndsAt) return null; // round's over
+
+    if (now < game.countdownEndsAt) {
+      // Heard in time — our own clean countdown, then the full duration.
+      var cd = now + COUNTDOWN_MS;
+      return {
+        round: game.round,
+        countdownEnd: cd,
+        playEnd: cd + game.durationSec * 1000,
+        late: false,
+        secondsAvailable: game.durationSec
+      };
+    }
+
+    // Late joiner — no countdown, share the room's finish line.
+    return {
+      round: game.round,
+      countdownEnd: 0,
+      playEnd: game.gameEndsAt,
+      late: true,
+      secondsAvailable: Math.max(0, Math.round((game.gameEndsAt - now) / 1000))
+    };
+  }
+
+  // Runs a purely local countdown. No network in the loop, so the
+  // animation is smooth regardless of backend latency. Calls onTick(n)
+  // each time the whole-second number changes, then onDone().
+  function runCountdown(countdownEnd, onTick, onDone) {
+    var last = null;
+    var id = setInterval(function () {
+      var left = Math.ceil((countdownEnd - Date.now()) / 1000);
+      if (left <= 0) { clearInterval(id); if (onDone) onDone(); return; }
+      if (left !== last) { last = left; if (onTick) onTick(left); }
+    }, 80);
+    var first = Math.ceil((countdownEnd - Date.now()) / 1000);
+    if (first > 0 && onTick) { last = first; onTick(first); }
+    return { cancel: function () { clearInterval(id); } };
+  }
+
+  /* ---------------------------------------------------------------
+     PLAYERS
   ----------------------------------------------------------------*/
   function pushProgress(fields) {
     return apiPost("updatePlayer", Object.assign({ gameType: CONFIG.gameType }, fields)).catch(function () {});
@@ -307,11 +280,6 @@
     return apiGet("getPlayers", { code: code, round: round });
   }
 
-  // Accepts either a plain number (legacy — just a limit) or an options
-  // object: {limit, code, round}. Omitting code/round returns the
-  // all-time board across every game code ever played for this gameType;
-  // passing code narrows to one game's history; passing code+round
-  // narrows to a single round's final results.
   function getLeaderboard(opts) {
     var o = (typeof opts === "number") ? { limit: opts } : (opts || {});
     return apiGet("getLeaderboard", {
@@ -320,29 +288,32 @@
   }
 
   /* ---------------------------------------------------------------
-     UI HELPERS — small reusable pieces every game needs, styling
-     left to the page's own CSS via these class names.
+     UI HELPERS
   ----------------------------------------------------------------*/
-  function maskHtml(game, kicker, sub) {
-    var remaining = Math.max(0, Math.ceil(((game && game.countdownEndsAt) || 0 - Date.now()) / 1000));
+  // `countdownEnd` here is the device's OWN local countdown end, not
+  // the game row's shared timestamp.
+  function maskHtml(countdownEnd, kicker, sub) {
+    var end = countdownEnd || 0;
+    var remaining = Math.max(0, Math.ceil((end - Date.now()) / 1000));
     return (
       '<div class="mask" id="countMask">' +
         '<div class="mask-kicker">' + (kicker || "Starting in") + '</div>' +
-        '<div class="mask-num mono" id="maskNum">' + remaining + '</div>' +
+        '<div class="mask-num mono pop" id="maskNum">' + remaining + '</div>' +
         '<div class="mask-sub">' + (sub || "") + '</div>' +
       '</div>'
     );
   }
 
-  function updateMaskNum(game) {
+  function setMaskNum(n) {
     var el = document.getElementById("maskNum");
-    if (el && game) {
-      el.textContent = Math.max(0, Math.ceil((game.countdownEndsAt - Date.now()) / 1000));
-    }
+    if (!el) return;
+    el.textContent = n;
+    el.classList.remove("pop");
+    void el.offsetWidth; // force reflow so the animation restarts
+    el.classList.add("pop");
   }
 
   function scoreboardTableHtml(rows, columns) {
-    // columns: [{key, label, numeric}]
     if (!rows || !rows.length) return '<div class="lb-empty">No scores reported yet.</div>';
     var head = '<th>#</th>' + columns.map(function (c) {
       return '<th' + (c.numeric ? ' class="num"' : '') + '>' + c.label + '</th>';
@@ -372,8 +343,11 @@
       stopPolling: stopPolling,
       startRound: startRound,
       endRound: endRound,
-      retryFailedWrite: retryFailedWrite,
       getCurrent: function () { return currentGame; }
+    },
+    round: {
+      plan: planRound,
+      runCountdown: runCountdown
     },
     players: {
       pushProgress: pushProgress,
@@ -381,6 +355,6 @@
       getPlayers: getPlayers
     },
     leaderboard: { get: getLeaderboard },
-    ui: { maskHtml: maskHtml, updateMaskNum: updateMaskNum, scoreboardTableHtml: scoreboardTableHtml }
+    ui: { maskHtml: maskHtml, setMaskNum: setMaskNum, scoreboardTableHtml: scoreboardTableHtml }
   };
 })(window);
