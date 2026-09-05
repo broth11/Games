@@ -34,8 +34,56 @@
      POST uses text/plain to stay a CORS "simple request" (Apps Script
      has no OPTIONS/preflight handler, so a JSON content-type would
      otherwise be blocked by the browser before it ever leaves).
+
+     A classroom-scale load (a whole class polling the same Apps
+     Script deployment once a second) can push its 1-2.5s normal
+     round trip much higher, or make it hang outright on a cold
+     start. Two things guard against that:
+       - REQUEST_TIMEOUT_MS aborts any single request that takes too
+         long, instead of leaving it to hang forever with nothing
+         ever resolving.
+       - withRetry() gives one-shot calls (login lookup, create game,
+         start/end round) a few attempts with backoff before giving
+         up, instead of failing silently on the first hiccup.
+     Steady polling deliberately opts OUT of retries (see
+     startPolling below) — the next tick a second later already
+     serves as the retry, so stacking retries on top of that would
+     only add more concurrent load to an already-overloaded backend.
   ----------------------------------------------------------------*/
-  function apiGet(action, params) {
+  var REQUEST_TIMEOUT_MS = 7000;
+  var DEFAULT_RETRIES = 2;      // up to 3 attempts total
+  var RETRY_BASE_DELAY_MS = 600;
+
+  function fetchJson(url, fetchOpts) {
+    var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS) : null;
+    var opts = Object.assign({}, fetchOpts || {});
+    if (controller) opts.signal = controller.signal;
+    return fetch(url, opts).then(function (r) {
+      if (timer) clearTimeout(timer);
+      if (!r.ok) throw new Error("http_" + r.status);
+      return r.json();
+    }, function (err) {
+      if (timer) clearTimeout(timer);
+      throw err;
+    });
+  }
+
+  function delay(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
+  function withRetry(fn, retries, attempt) {
+    attempt = attempt || 0;
+    return fn().catch(function (err) {
+      if (attempt >= retries) throw err;
+      return delay(RETRY_BASE_DELAY_MS * Math.pow(1.8, attempt)).then(function () {
+        return withRetry(fn, retries, attempt + 1);
+      });
+    });
+  }
+
+  function apiGet(action, params, opts) {
+    opts = opts || {};
+    var retries = (opts.retries != null) ? opts.retries : DEFAULT_RETRIES;
     var url = CONFIG.appsScriptUrl + "?action=" + encodeURIComponent(action);
     if (params) {
       Object.keys(params).forEach(function (k) {
@@ -44,16 +92,48 @@
         }
       });
     }
-    return fetch(url).then(function (r) { return r.json(); });
+    return withRetry(function () { return fetchJson(url); }, retries);
   }
 
-  function apiPost(action, body) {
+  function apiPost(action, body, opts) {
+    opts = opts || {};
+    var retries = (opts.retries != null) ? opts.retries : DEFAULT_RETRIES;
     var payload = Object.assign({ action: action }, body || {});
-    return fetch(CONFIG.appsScriptUrl, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); });
+    return withRetry(function () {
+      return fetchJson(CONFIG.appsScriptUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+    }, retries);
+  }
+
+  // Wraps a write so a caller can be told definitively whether it
+  // landed, and — if every retry is exhausted — can offer the user a
+  // manual "Retry" that resends the exact same payload rather than
+  // recomputing one (recomputing timestamps on retry is how a
+  // "double start" bug would sneak in).
+  var lastFailedWrite = null; // {action, body}
+
+  function writeWithRetry(action, body) {
+    return apiPost(action, body).then(function (res) {
+      lastFailedWrite = null;
+      return res;
+    }, function (err) {
+      lastFailedWrite = { action: action, body: body };
+      throw err;
+    });
+  }
+
+  function retryFailedWrite(callbacks) {
+    callbacks = callbacks || {};
+    if (!lastFailedWrite) return;
+    var w = lastFailedWrite;
+    writeWithRetry(w.action, w.body).then(function (res) {
+      if (callbacks.onSuccess) callbacks.onSuccess(res);
+    }, function (err) {
+      if (callbacks.onError) callbacks.onError(err);
+    });
   }
 
   /* ---------------------------------------------------------------
@@ -140,14 +220,17 @@
     stopPolling();
     function tick() {
       var mySeq = ++pollSeq;
-      apiGet("getGame", { code: code }).then(function (game) {
+      // retries:0 — the next tick a couple seconds from now IS the retry;
+      // stacking real retries on top of the poll loop would only pile
+      // more concurrent requests onto a backend that's already slow.
+      apiGet("getGame", { code: code }, { retries: 0 }).then(function (game) {
         if (mySeq !== pollSeq) return; // a newer request already finished — drop this stale one
         currentGame = game && game.exists ? game : null;
         onUpdate(currentGame);
       }).catch(function () { /* transient network hiccup — next tick retries */ });
     }
     tick();
-    pollTimer = setInterval(tick, intervalMs || 1000);
+    pollTimer = setInterval(tick, intervalMs || 2500);
   }
 
   function stopPolling() {
@@ -163,7 +246,14 @@
   // math means everyone still converges on the exact same start/end
   // instant once they do hear about it, they just may join the countdown
   // already a beat or two in rather than always seeing a clean "5".
-  function startRound(code, minutes) {
+  // `callbacks` is optional: {onSuccess(res), onError(err)}. The local
+  // currentGame update and return happen synchronously either way (so the
+  // host's own screen still reacts instantly), but now the caller can
+  // also find out — after a few retries — whether the write that makes
+  // it real for every OTHER device actually landed, instead of that
+  // failure being swallowed silently.
+  function startRound(code, minutes, callbacks) {
+    callbacks = callbacks || {};
     var durationSec = Math.round(minutes * 60);
     var now = Date.now();
     var countdownEndsAt = now + COUNTDOWN_MS;
@@ -173,14 +263,19 @@
       exists: true, code: code, gameType: CONFIG.gameType, round: round,
       durationSec: durationSec, countdownEndsAt: countdownEndsAt, gameEndsAt: gameEndsAt, startedAt: now
     };
-    apiPost("startRound", {
+    writeWithRetry("startRound", {
       code: code, round: round, durationSec: durationSec,
       countdownEndsAt: countdownEndsAt, gameEndsAt: gameEndsAt
-    }).catch(function () {});
+    }).then(function (res) {
+      if (callbacks.onSuccess) callbacks.onSuccess(res);
+    }, function (err) {
+      if (callbacks.onError) callbacks.onError(err);
+    });
     return currentGame;
   }
 
-  function endRound(code) {
+  function endRound(code, callbacks) {
+    callbacks = callbacks || {};
     var now = Date.now();
     if (currentGame) {
       currentGame = Object.assign({}, currentGame, {
@@ -188,7 +283,11 @@
         countdownEndsAt: Math.min(currentGame.countdownEndsAt || now, now)
       });
     }
-    apiPost("endRound", { code: code }).catch(function () {});
+    writeWithRetry("endRound", { code: code }).then(function (res) {
+      if (callbacks.onSuccess) callbacks.onSuccess(res);
+    }, function (err) {
+      if (callbacks.onError) callbacks.onError(err);
+    });
     return currentGame;
   }
 
@@ -273,6 +372,7 @@
       stopPolling: stopPolling,
       startRound: startRound,
       endRound: endRound,
+      retryFailedWrite: retryFailedWrite,
       getCurrent: function () { return currentGame; }
     },
     players: {

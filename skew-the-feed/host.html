@@ -121,7 +121,8 @@
     screen: "dashboard",       // dashboard | results | history
     resultsRound: null, resultsRows: [], resultsLoading: false,
     historyTab: "round",       // round | game | all
-    historyRows: [], historyLoading: false
+    historyRows: [], historyLoading: false,
+    writeError: ""             // set when a start/end-round write fails after all retries
   };
 
   function lsGet(k){ try{ return localStorage.getItem(k)||""; }catch(e){ return ""; } }
@@ -129,6 +130,19 @@
   function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
   state.hostCode = lsGet("skewfeed_host_code");
+
+  // Paint the dashboard from the last game state we actually heard back
+  // from the server, instead of a bare "Loading…" — Apps Script under a
+  // full class's worth of concurrent polling can take a while to answer
+  // the very first request, and there's no reason to stare at a blank
+  // screen when we already know roughly where things stood a moment ago.
+  // The live poll (below) still runs immediately and replaces this the
+  // instant a fresh answer comes back.
+  if (state.hostCode) {
+    var cachedGame = null;
+    try { cachedGame = JSON.parse(lsGet("skewfeed_last_game_" + state.hostCode) || "null"); } catch (e) { cachedGame = null; }
+    if (cachedGame) { state.game = cachedGame; state.hostChecked = true; }
+  }
 
   function masthead(kicker){
     return '<div class="masthead"><div class="kicker">'+esc(kicker||"AP STATISTICS · UNIT 1 FIELD EXERCISE")+'</div>' +
@@ -202,6 +216,7 @@
         '<button class="btn btn-flag" id="hostStartBtn" style="margin-top:16px;" '+(running?"disabled":"")+'>'+(phase==="ended"?"Start Next Round":"Start Round")+'</button>' +
         '<button class="btn btn-ghost" id="hostEndBtn" style="margin-top:10px; display:'+(running?"block":"none")+';">End Round Now</button>' +
         (phase==="ended" ? '<button class="btn btn-ghost" id="showResultsBtn" style="margin-top:10px;">Show Round Results</button>' : '') +
+        (state.writeError ? '<div class="err" style="min-height:auto; margin-top:10px;">'+esc(state.writeError)+' <button class="link-quiet" id="retryWriteBtn" style="display:inline; margin:0;">Retry</button></div>' : '') +
         '<p class="host-note">Every device with this code gets a 5-second countdown mask, then plays together for the length you set above. Everyone still moves through posts at their own pace &mdash; the clock is just shared.</p>' +
       '</div>' +
       '<div class="card" style="margin-top:16px;">' +
@@ -342,11 +357,20 @@
     if (!mins || mins < 1) mins = DEFAULT_MINUTES;
     if (mins > 20) mins = 20;
     state.hostDurationMinutes = mins;
+    state.writeError = "";
     // startRound() updates Engine's internal game state synchronously and
     // returns it immediately — render on THAT rather than waiting for the
     // next poll, so the host's own screen reacts the instant they click,
-    // with no lag from the Apps Script round trip.
-    var game = Engine.session.startRound(state.hostCode, mins);
+    // with no lag from the Apps Script round trip. The write to the
+    // server (which is what makes it real for every student device)
+    // happens in the background with its own retries; onError below only
+    // fires if every one of those retries fails.
+    var game = Engine.session.startRound(state.hostCode, mins, {
+      onError: function(){
+        state.writeError = "Couldn't confirm the round started with the server — students may not see it. Check your connection, then retry.";
+        render();
+      }
+    });
     state.game = game; lastRound = game.round; state.playersShown = [];
     state.screen = "dashboard";
     render();
@@ -354,7 +378,13 @@
 
   function hostEndRound(){
     if (!state.hostCode) return;
-    var game = Engine.session.endRound(state.hostCode);
+    state.writeError = "";
+    var game = Engine.session.endRound(state.hostCode, {
+      onError: function(){
+        state.writeError = "Couldn't confirm the round ended with the server. Check your connection, then retry.";
+        render();
+      }
+    });
     state.game = game;
     render();
   }
@@ -393,11 +423,16 @@
   var lastRound = null;
   var lastPhase = null;
   function startPolling(code){
-    Engine.session.startPolling(code, 1000, function(game){
+    // 2.5s rather than 1s: Apps Script's own round trip already runs
+    // 1-2.5s, so polling faster than that just piles up concurrent
+    // requests (worse for everyone) without students seeing anything
+    // sooner in practice.
+    Engine.session.startPolling(code, 2500, function(game){
       state.game = game; state.hostChecked = true;
+      if (game) lsSet("skewfeed_last_game_" + code, JSON.stringify(game));
       if (!game){
         // stored code no longer exists (sheet cleared, new deployment, etc.)
-        state.hostCode = ""; lsSet("skewfeed_host_code","");
+        state.hostCode = ""; lsSet("skewfeed_host_code",""); lsSet("skewfeed_last_game_" + code, "");
         render();
         return;
       }
@@ -420,6 +455,12 @@
     if ((el = document.getElementById("hostCreateBtn"))) el.addEventListener("click", hostCreateGame);
     if ((el = document.getElementById("hostStartBtn"))) el.addEventListener("click", hostStartRound);
     if ((el = document.getElementById("hostEndBtn"))) el.addEventListener("click", hostEndRound);
+    if ((el = document.getElementById("retryWriteBtn"))) el.addEventListener("click", function(){
+      Engine.session.retryFailedWrite({
+        onSuccess: function(){ state.writeError = ""; render(); },
+        onError: function(){ state.writeError = "Still couldn't reach the server. Check your connection, then retry."; render(); }
+      });
+    });
     if ((el = document.getElementById("showResultsBtn"))) el.addEventListener("click", openResults);
     if ((el = document.getElementById("resultsBackBtn"))) el.addEventListener("click", function(){ state.screen = "dashboard"; render(); });
     if ((el = document.getElementById("resultsNextBtn"))) el.addEventListener("click", hostStartRound);

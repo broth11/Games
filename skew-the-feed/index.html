@@ -551,7 +551,10 @@
      GAME POLLING (replaces the old db onSnapshot)
   ----------------------------------------------------------------*/
   function startGamePolling(code){
-    Engine.session.startPolling(code, 1000, function(game){
+    // 2.5s, not 1s — matches host.html. Apps Script's own round trip is
+    // already 1-2.5s, so a faster poll from every device in the class
+    // just piles up concurrent load without anyone seeing state sooner.
+    Engine.session.startPolling(code, 2500, function(game){
       state.game = game;
       if (!game && (state.screen==="lobby" || state.screen==="briefing")){
         state.gameCode = ""; lsSet("skewfeed_code","");
