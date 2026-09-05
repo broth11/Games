@@ -52,6 +52,7 @@
   .btn-ghost{background:transparent; color:var(--ink); border:1.5px solid var(--rule);}
   .btn-sm{padding:9px 14px; font-size:14px;}
   .err{color:var(--flag); font-size:13px; margin-top:8px; min-height:16px;}
+  .code-input{text-transform:uppercase; text-align:center; letter-spacing:.3em; font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:22px !important;}
   .link-quiet{background:none; border:none; color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; font-size:12px; text-decoration:underline; cursor:pointer; padding:6px 0;}
   table.lb{width:100%; border-collapse:collapse; margin-top:14px; font-size:14px;}
   table.lb th{text-align:left; font-family:"IBM Plex Mono",monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); padding:0 6px 8px; border-bottom:2px solid var(--ink);}
@@ -146,6 +147,7 @@
   var DEFAULT_MINUTES = 5;
   var SCORE_REFRESH_MS = 15000;
   var HOST_POLL_MS = 3000;   // the host writes state; it barely needs to read it
+  var HOST_MISS_LIMIT = 4;   // consecutive null polls before we accept the game is gone
   var CLOCK_TICK_MS = 250;   // purely local — the clock never waits on a request
 
   // Tabulating screen: students finish a beat apart because each device
@@ -157,6 +159,7 @@
 
   var state = {
     hostCode: "", hostChecked: false, hostCreating: false, hostCreateError: "",
+    hostRejoining: false, hostRejoinError: "", hostMisses: 0,
     game: null, hostDurationMinutes: DEFAULT_MINUTES,
     playersShown: [],
     screen: "dashboard",       // dashboard | results | history
@@ -194,6 +197,12 @@
         '<p>Generate a game code to project on the board. Students open the class link and enter this code to join this room&rsquo;s shift.</p>' +
         (state.hostCreateError ? '<div class="err" style="min-height:auto;">'+esc(state.hostCreateError)+'</div>' : '') +
         '<button class="btn btn-flag" id="hostCreateBtn" '+(state.hostCreating?"disabled":"")+'>'+(state.hostCreating?"Creating…":"Generate Game Code")+'</button>' +
+        '<div style="margin-top:22px; border-top:1px solid var(--rule); padding-top:16px;">' +
+          '<label for="hostRejoinCode">Already running a game? Enter its code</label>' +
+          '<input id="hostRejoinCode" class="code-input" type="text" maxlength="6" placeholder="&mdash; &mdash; &mdash; &mdash;" autocomplete="off" autocapitalize="characters" />' +
+          (state.hostRejoinError ? '<div class="err" style="min-height:auto;">'+esc(state.hostRejoinError)+'</div>' : '') +
+          '<button class="btn btn-ghost btn-sm" id="hostRejoinBtn" style="margin-top:8px;" '+(state.hostRejoining?"disabled":"")+'>'+(state.hostRejoining?"Checking…":"Rejoin Game")+'</button>' +
+        '</div>' +
       '</div>';
   }
 
@@ -235,6 +244,7 @@
         '<div class="host-top"><div><p class="eyebrow" style="margin:0;">Front of Room</p><h2 class="section-title" style="margin:0;">Run the shift</h2></div>' +
           '<div class="host-top-right">' + muteBtnHtml() +
             '<span class="phase-pill '+phase+'" id="hostPhasePill">'+phaseLabel(phase)+'</span></div></div>' +
+        (state.hostMisses ? '<p class="host-note" id="hostReconnectNote">Reconnecting to the game board&hellip;</p>' : '') +
         '<div class="big-clock mono" id="hostClockNum">'+clockText(game, phase)+'</div>' +
         '<div id="hostDurationBlock" style="display:'+(running?"none":"block")+';">' +
           '<label for="hostMinutes">Round length (minutes)</label>' +
@@ -432,6 +442,7 @@
     // register within a poll cycle instead of waiting on it forever.
     Engine.session.createGame(state.hostCode || undefined).then(function(code){
       state.hostCreating = false; state.hostCode = code; state.hostChecked = false;
+      state.hostMisses = 0;
       state.hostDurationMinutes = DEFAULT_MINUTES;
       lsSet("skewfeed_host_code", code);
       startPolling(code);
@@ -458,6 +469,30 @@
     state.playersShown = [];
     state.screen = "dashboard";
     render();
+  }
+
+  function hostRejoinGame(){
+    var input = document.getElementById("hostRejoinCode");
+    var code = input ? input.value.replace(/[^A-Z0-9]/g, "").toUpperCase() : "";
+    if (state.hostRejoining) return;
+    state.hostRejoining = true; state.hostRejoinError = ""; render();
+    Engine.session.checkCode(code).then(function(found){
+      state.hostRejoining = false;
+      if (!found){
+        state.hostRejoinError = "No active game with that code.";
+        render();
+        return;
+      }
+      state.hostCode = code; state.hostChecked = false; state.hostMisses = 0;
+      state.game = null; state.screen = "dashboard"; lastRound = null;
+      lsSet("skewfeed_host_code", code);
+      startPolling(code);
+      render();
+    }).catch(function(){
+      state.hostRejoining = false;
+      state.hostRejoinError = "Couldn't reach the game board — try again.";
+      render();
+    });
   }
 
   function hostEndRound(){
@@ -520,21 +555,32 @@
 
   var lastRound = null;
   function startPolling(code){
-    Engine.session.startPolling(code, HOST_POLL_MS, function(game){
-      state.game = game; state.hostChecked = true;
+    Engine.session.startPolling(code, HOST_POLL_MS, function(game, meta){
+      state.hostChecked = true;
       if (!game){
+        if (!meta || !meta.retired){
+          state.hostMisses += 1;
+          if (state.hostMisses < HOST_MISS_LIMIT){
+            if (state.screen === "dashboard") render();
+            return;
+          }
+        }
+        state.hostMisses = 0;
         state.hostCode = ""; lsSet("skewfeed_host_code","");
         Engine.audio.stop();
         render();
         return;
       }
+      var wasReconnecting = state.hostMisses > 0;
+      state.hostMisses = 0;
+      state.game = game;
       var roundChanged = game.round !== lastRound;
       lastRound = game.round;
       if (roundChanged){
         state.playersShown = [];
         lastLocalPhase = null;
         render();
-      } else if (!document.getElementById("hostPhasePill") && state.screen === "dashboard"){
+      } else if (wasReconnecting || !document.getElementById("hostPhasePill") && state.screen === "dashboard"){
         render();   // first paint after boot
       }
       ensureScoreLoop();
@@ -549,6 +595,9 @@
       this.innerHTML = Engine.audio.isMuted() ? "&#128263; Muted" : "&#128266; Sound";
     });
     if ((el = document.getElementById("hostCreateBtn"))) el.addEventListener("click", hostCreateGame);
+    if ((el = document.getElementById("hostRejoinCode"))) el.addEventListener("input", function(){ this.value = this.value.replace(/[^A-Z0-9]/gi, "").toUpperCase().slice(0,6); });
+    if ((el = document.getElementById("hostRejoinBtn"))) el.addEventListener("click", hostRejoinGame);
+    if ((el = document.getElementById("hostRejoinCode"))) el.addEventListener("keydown", function(e){ if (e.key === "Enter") hostRejoinGame(); });
     if ((el = document.getElementById("hostStartBtn"))) el.addEventListener("click", hostStartRound);
     if ((el = document.getElementById("hostEndBtn"))) el.addEventListener("click", hostEndRound);
     if ((el = document.getElementById("showResultsBtn"))) el.addEventListener("click", openResults);
