@@ -265,6 +265,29 @@
 
   function lsGet(k){ try{ return localStorage.getItem(k)||""; }catch(e){ return ""; } }
   function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  function lsClear(k){ try{ localStorage.removeItem(k); }catch(e){} }
+
+  // A game code is never deleted from the Games sheet, so an old cached
+  // code always still "exists" — a poll against it won't come back null,
+  // it'll just sit at phase "ended" forever if the teacher has since moved
+  // on to a different code (new period, next day, whatever). Auto-resuming
+  // into the lobby on that stale code leaves a returning student watching
+  // a shift that will never start. CODE_TTL_MS bounds how long we'll trust
+  // a cached code without the student re-confirming it — long enough to
+  // survive a single class period, short enough to force a fresh join the
+  // next day.
+  var CODE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+  function rememberCode(code){
+    lsSet("skewfeed_code", code);
+    lsSet("skewfeed_code_ts", String(Date.now()));
+  }
+  function forgetCode(){
+    state.gameCode = ""; lsClear("skewfeed_code"); lsClear("skewfeed_code_ts");
+  }
+  function cachedCodeIsFresh(){
+    var ts = parseInt(lsGet("skewfeed_code_ts"), 10);
+    return !!ts && (Date.now() - ts) < CODE_TTL_MS;
+  }
 
   state.gameCode = lsGet("skewfeed_code");
 
@@ -338,7 +361,8 @@
         '<p>Wrong calls break your streak and cost you nothing else &mdash; but read the correction, it\'s worth more than the points.</p>' +
         '<p>The whole newsroom starts together. Head to the lobby and wait for the news desk to kick off the shift.</p>' +
         '<button class="btn btn-flag" id="goBtn">Enter the Lobby</button>' +
-      '</div>';
+      '</div>' +
+      '<div style="text-align:center; margin-top:10px;"><button class="link-quiet" id="switchCodeBtn">Wrong class or code? Switch game</button></div>';
   }
 
   /* ---------------------------------------------------------------
@@ -354,7 +378,10 @@
         '<div class="lobby-status" style="justify-content:center;"><span class="pulse-dot"></span>'+msg+'</div>' +
         '<p style="color:var(--ink-soft); font-size:13.5px;">Keep this tab open &mdash; the shift starts for everyone at once, no button to press.</p>' +
       '</div>' +
-      '<div style="text-align:center; margin-top:16px;"><button class="link-quiet" id="toLbBtn">View full leaderboard &rarr;</button></div>';
+      '<div style="text-align:center; margin-top:16px;">' +
+        '<button class="link-quiet" id="toLbBtn">View full leaderboard &rarr;</button>' +
+        '<button class="link-quiet" id="switchCodeBtn" style="display:block; margin:6px auto 0;">Nothing happening? Switch game code</button>' +
+      '</div>';
   }
 
   /* ---------------------------------------------------------------
@@ -606,7 +633,7 @@
           if (!idRes || !idRes.found){ errEl.textContent = "That student ID isn't on the roster. Double-check the number."; return; }
           errEl.textContent = "";
           state.gameCode = code; state.joinError = "";
-          lsSet("skewfeed_code", code);
+          rememberCode(code);
           startGamePolling(code);
           state.screen = "briefing";
           render();
@@ -618,6 +645,12 @@
       document.getElementById("idInput").addEventListener("keydown", function(e){ if (e.key==="Enter") document.getElementById("startBtn").click(); });
     }
     if ((el = document.getElementById("toLbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; render(); });
+    if ((el = document.getElementById("switchCodeBtn"))) el.addEventListener("click", function(){
+      Engine.session.stopPolling();
+      forgetCode();
+      state.joinError = "";
+      state.screen = "register"; render();
+    });
     if ((el = document.getElementById("goBtn"))) el.addEventListener("click", function(){ state.screen="lobby"; render(); });
     if ((el = document.getElementById("verdictGrid"))) el.addEventListener("click", function(e){ var btn=e.target.closest(".verdict-btn"); if(btn) handleAnswer(btn.getAttribute("data-cat")); });
     if ((el = document.getElementById("againBtn"))) el.addEventListener("click", function(){ state.screen="lobby"; render(); });
@@ -635,7 +668,7 @@
       state.game = game;
 
       if (!game && (state.screen==="lobby" || state.screen==="briefing")){
-        state.gameCode = ""; lsSet("skewfeed_code","");
+        forgetCode();
         state.joinError = "That game code isn't active anymore — ask your teacher for the current code.";
         state.screen = "register"; render();
         return;
@@ -663,9 +696,17 @@
   /* ---------------------------------------------------------------
      BOOT
   ----------------------------------------------------------------*/
-  if (Engine.identity.isLoggedIn() && state.gameCode){
+  if (Engine.identity.isLoggedIn() && state.gameCode && cachedCodeIsFresh()){
     state.screen = "lobby";
     startGamePolling(state.gameCode);
+  } else if (state.gameCode && !cachedCodeIsFresh()){
+    // Old enough that the teacher has likely moved on to a different code
+    // (next period, next day). Don't silently sit in a dead lobby — land
+    // back on register instead. Leave state.gameCode as-is so the code
+    // field shows the old value prefilled (one tap to re-join if it's
+    // still the same code), but clear the stored timestamp so we don't
+    // keep re-triggering this on every reload.
+    lsClear("skewfeed_code_ts");
   }
   refreshLeaderboard();
   // Only poll the leaderboard on screens that actually show it — this
