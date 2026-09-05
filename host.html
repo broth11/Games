@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Skew the Feed — News Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E7EBE2; --card:#F8FAF4; --card-2:#EFF2E8; --ink:#1B1F1A; --ink-soft:#565F53;
+    --rule:#C7CFBE; --flag:#D8433E; --flag-ink:#FFF6F1; --wire:#178272; --wire-ink:#F1FBF7;
+    --focus:#2F5D8A; --shadow: 0 1px 0 rgba(27,31,26,0.06), 0 8px 20px -12px rgba(27,31,26,0.35);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#14171A; --card:#1D2120; --card-2:#242927; --ink:#ECEFE8; --ink-soft:#A2AA9C;
+      --rule:#3A413B; --flag:#E8615C; --flag-ink:#241110; --wire:#3EBBA3; --wire-ink:#0E211D; --focus:#7FB0E0;
+      --shadow: 0 1px 0 rgba(0,0,0,0.4), 0 12px 28px -14px rgba(0,0,0,0.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#14171A; --card:#1D2120; --card-2:#242927; --ink:#ECEFE8; --ink-soft:#A2AA9C;
+    --rule:#3A413B; --flag:#E8615C; --flag-ink:#241110; --wire:#3EBBA3; --wire-ink:#0E211D; --focus:#7FB0E0;
+    --shadow: 0 1px 0 rgba(0,0,0,0.4), 0 12px 28px -14px rgba(0,0,0,0.6);
+  }
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body{ background: radial-gradient(circle at 1px 1px, var(--rule) 1px, transparent 0) 0 0/16px 16px, var(--paper);
+    color:var(--ink); font-family:"IBM Plex Sans",-apple-system,system-ui,sans-serif; -webkit-font-smoothing:antialiased; min-height:100vh; }
+  .mono{font-family:"IBM Plex Mono","SF Mono",monospace; font-variant-numeric:tabular-nums;}
+  a{color:inherit;} button{font-family:inherit;}
+  :focus-visible{outline:3px solid var(--focus); outline-offset:2px;}
+  .wrap{max-width:820px; margin:0 auto; padding:28px 18px 60px;}
+  .masthead{text-align:center; margin-bottom:22px;}
+  .kicker{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;}
+  .nameplate{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(34px,7vw,52px); line-height:0.9; letter-spacing:0.01em; text-transform:uppercase; text-wrap:balance; margin:0;}
+  .nameplate em{font-style:normal; color:var(--flag);}
+  .dateline{display:flex; justify-content:space-between; align-items:center; border-top:2px solid var(--ink); border-bottom:1px solid var(--rule); padding:6px 2px; margin-top:10px; font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft);}
+  .card{background:var(--card); border:1px solid var(--rule); border-radius:3px; box-shadow:var(--shadow); padding:20px 20px 22px;}
+  .stack > * + *{margin-top:16px;}
+  .eyebrow{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); margin:0 0 10px;}
+  h2.section-title{font-family:"Big Shoulders Display",sans-serif; font-weight:800; font-size:24px; letter-spacing:.01em; text-transform:uppercase; margin:0 0 4px; text-wrap:balance;}
+  p{line-height:1.5;}
+  label{display:block; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); margin-bottom:6px;}
+  input[type=number]{width:100%; padding:12px 12px; border-radius:3px; border:1.5px solid var(--rule); background:var(--card-2); color:var(--ink); font-size:16px; font-family:inherit;}
+  input[type=number]:focus{border-color:var(--focus);}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px 18px; border-radius:3px; border:none; cursor:pointer; font-family:"Big Shoulders Display",sans-serif; font-weight:800; font-size:19px; letter-spacing:.03em; text-transform:uppercase; background:var(--ink); color:var(--paper); transition:transform .08s ease;}
+  .btn:active{transform:scale(0.98);} .btn:disabled{opacity:.45; cursor:not-allowed;}
+  .btn-flag{background:var(--flag); color:var(--flag-ink);}
+  .btn-ghost{background:transparent; color:var(--ink); border:1.5px solid var(--rule);}
+  .btn-sm{padding:9px 14px; font-size:14px;}
+  .err{color:var(--flag); font-size:13px; margin-top:8px; min-height:16px;}
+  .link-quiet{background:none; border:none; color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; font-size:12px; text-decoration:underline; cursor:pointer; padding:6px 0;}
+  table.lb{width:100%; border-collapse:collapse; margin-top:14px; font-size:14px;}
+  table.lb th{text-align:left; font-family:"IBM Plex Mono",monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); padding:0 6px 8px; border-bottom:2px solid var(--ink);}
+  table.lb td{padding:9px 6px; border-bottom:1px solid var(--rule); vertical-align:middle;}
+  table.lb td.num, table.lb th.num{font-family:"IBM Plex Mono",monospace; text-align:right; font-variant-numeric:tabular-nums;}
+  .rank-badge{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:600; background:var(--card-2); color:var(--ink-soft);}
+  .rank-badge.top{background:var(--flag); color:var(--flag-ink);}
+  .lb-empty{padding:30px 10px; text-align:center; color:var(--ink-soft); font-size:14px;}
+  .backlink{display:inline-block; margin-bottom:14px; font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft); text-decoration:none; cursor:pointer; background:none; border:none; padding:0;}
+  .reset-box{margin-top:10px; display:flex; gap:8px;} .reset-box input{flex:1; padding:12px; border-radius:3px; border:1.5px solid var(--rule); background:var(--card-2); color:var(--ink);}
+  .phase-pill{display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:20px; font-family:"IBM Plex Mono",monospace; font-size:11px; text-transform:uppercase; letter-spacing:.07em; border:1px solid var(--rule); color:var(--ink-soft);}
+  .phase-pill.live{background:var(--wire-ink); color:var(--wire); border-color:var(--wire);}
+  .phase-pill.countdown{background:var(--flag-ink); color:var(--flag); border-color:var(--flag);}
+  .phase-pill.ended{background:var(--card-2); color:var(--ink-soft);}
+  .host-top{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+  .big-clock{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:56px; text-align:center; letter-spacing:.02em; margin:10px 0 2px;}
+  .preset-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
+  .preset-chip{padding:7px 14px; border-radius:20px; border:1.5px solid var(--rule); background:var(--card-2); color:var(--ink); font-family:"IBM Plex Mono",monospace; font-size:12.5px; cursor:pointer;}
+  .preset-chip.active{border-color:var(--flag); color:var(--flag); background:var(--flag-ink);}
+  .joined-note{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft); text-align:center; margin-top:6px;}
+  .host-note{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
+  .game-code-display{font-family:"IBM Plex Mono",monospace; font-weight:600; letter-spacing:.22em; font-size:clamp(46px,13vw,80px); line-height:1; color:var(--flag); margin:6px 0 2px;}
+</style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+
+<script src="../engine.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  Engine.configure({
+    appsScriptUrl: "https://script.google.com/macros/s/AKfycbwdGJAOLH5JskqJTckVxZuOGcu-nBAEj0DXe5M2tKcWHby4ZfVRM_1-IL11WA_g0iIr7Q/exec",
+    gameType: "skew-the-feed"
+  });
+
+  var DEFAULT_MINUTES = 5;
+  var SCORE_REFRESH_MS = 15000;
+
+  var state = {
+    hostCode: "", hostChecked: false, hostCreating: false, hostCreateError: "",
+    game: null, hostDurationMinutes: DEFAULT_MINUTES,
+    playersShown: []
+  };
+
+  function lsGet(k){ try{ return localStorage.getItem(k)||""; }catch(e){ return ""; } }
+  function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+  state.hostCode = lsGet("skewfeed_host_code");
+
+  function masthead(kicker){
+    return '<div class="masthead"><div class="kicker">'+esc(kicker||"AP STATISTICS · UNIT 1 FIELD EXERCISE")+'</div>' +
+      '<h1 class="nameplate">The <em>News</em> Desk</h1>' +
+      '<div class="dateline"><span>Skew the Feed &mdash; Host</span><span>Front of Room</span></div></div>';
+  }
+
+  function render(){
+    document.getElementById("app").innerHTML = state.hostCode ? viewDashboard() : viewCreate();
+    bind();
+  }
+
+  function viewCreate(){
+    return '' + masthead() +
+      '<div class="card stack" style="text-align:center;">' +
+        '<div><p class="eyebrow">Front of Room</p><h2 class="section-title">Start a new game</h2></div>' +
+        '<p>Generate a game code to project on the board. Students open the class link and enter this code to join this room&rsquo;s shift.</p>' +
+        (state.hostCreateError ? '<div class="err" style="min-height:auto;">'+esc(state.hostCreateError)+'</div>' : '') +
+        '<button class="btn btn-flag" id="hostCreateBtn" '+(state.hostCreating?"disabled":"")+'>'+(state.hostCreating?"Creating…":"Generate Game Code")+'</button>' +
+      '</div>';
+  }
+
+  function phaseLabel(phase){
+    return phase==="idle" ? "No round running" : phase==="countdown" ? "Starting…" : phase==="live" ? "Live" : "Round ended";
+  }
+
+  function clockText(game, phase){
+    if (!game || phase==="idle") return "—";
+    if (phase==="countdown") return Math.max(0, Math.ceil((game.countdownEndsAt-Date.now())/1000))+"s";
+    if (phase==="live"){ var r=Math.max(0,Math.round((game.gameEndsAt-Date.now())/1000)); var mm=Math.floor(r/60), ss=r%60; return mm+":"+(ss<10?"0":"")+ss; }
+    return "Done";
+  }
+
+  function scoreTableHtml(){
+    return Engine.ui.scoreboardTableHtml(state.playersShown, [
+      {key:"displayName", label:"Name"},
+      {key:"period", label:"Period"},
+      {key:"score", label:"Score", numeric:true},
+      {key:"streak", label:"Streak", numeric:true}
+    ]);
+  }
+
+  function viewDashboard(){
+    if (!state.hostChecked){
+      return '' + masthead() + '<div class="card" style="text-align:center;"><p class="eyebrow">Loading&hellip;</p></div>';
+    }
+    var game = state.game;
+    var phase = Engine.session.derivePhase(game);
+    var mins = state.hostDurationMinutes;
+    var running = (phase==="countdown" || phase==="live");
+    return '' + masthead() +
+      '<div class="card" style="text-align:center;">' +
+        '<p class="eyebrow" style="margin:0;">Project this for the room</p>' +
+        '<div class="game-code-display mono">'+esc(state.hostCode)+'</div>' +
+        '<p class="host-note">Students go to the class link and enter this code to join.</p>' +
+      '</div>' +
+      '<div class="card" style="margin-top:16px;">' +
+        '<div class="host-top"><div><p class="eyebrow" style="margin:0;">Front of Room</p><h2 class="section-title" style="margin:0;">Run the shift</h2></div>' +
+          '<span class="phase-pill '+phase+'" id="hostPhasePill">'+phaseLabel(phase)+'</span></div>' +
+        '<div class="big-clock mono" id="hostClockNum">'+clockText(game, phase)+'</div>' +
+        '<div id="hostDurationBlock" style="display:'+(running?"none":"block")+';">' +
+          '<label for="hostMinutes">Round length (minutes)</label>' +
+          '<input id="hostMinutes" type="number" min="1" max="20" step="0.5" value="'+mins+'" />' +
+          '<div class="preset-row">'+[3,5,8,10].map(function(m){ return '<button class="preset-chip'+(mins===m?' active':'')+'" data-min="'+m+'">'+m+' min</button>'; }).join("")+'</div>' +
+        '</div>' +
+        '<button class="btn btn-flag" id="hostStartBtn" style="margin-top:16px;" '+(running?"disabled":"")+'>'+(phase==="ended"?"Start Next Round":"Start Round")+'</button>' +
+        '<button class="btn btn-ghost" id="hostEndBtn" style="margin-top:10px; display:'+(running?"block":"none")+';">End Round Now</button>' +
+        '<p class="host-note">Every device with this code gets a 5-second countdown mask, then plays together for the length you set above. Everyone still moves through posts at their own pace &mdash; the clock is just shared.</p>' +
+      '</div>' +
+      '<div class="card" style="margin-top:16px;">' +
+        '<p class="eyebrow" style="margin:0 0 4px;">Live Scoreboard &mdash; this round</p>' +
+        '<h2 class="section-title" style="margin:0 0 10px;">Round '+(game?game.round:0)+'</h2>' +
+        '<div id="hostScoreWrap">'+scoreTableHtml()+'</div>' +
+        '<div class="joined-note" id="hostJoinedNote">'+state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round &middot; board refreshes every 15s</div>' +
+      '</div>' +
+      '<div style="text-align:center; margin-top:16px;">' +
+        '<button class="link-quiet" id="newGameToggle" style="display:block; margin:6px auto 0;">Start a different game (new code)</button>' +
+        '<div class="reset-box" id="newGameBox" style="display:none; max-width:320px; margin:8px auto 0;">' +
+          '<input type="text" id="newGameConfirm" placeholder="Type NEW to confirm" />' +
+          '<button class="btn btn-ghost btn-sm" id="newGameGo" style="width:auto;">Go</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function hostCreateGame(){
+    if (state.hostCreating) return;
+    state.hostCreating = true; state.hostCreateError = ""; render();
+    Engine.session.createGame().then(function(code){
+      state.hostCreating = false; state.hostCode = code; state.hostChecked = false;
+      state.hostDurationMinutes = DEFAULT_MINUTES;
+      lsSet("skewfeed_host_code", code);
+      startPolling(code);
+      render();
+    }).catch(function(){
+      state.hostCreating = false;
+      state.hostCreateError = "Couldn't create the game. Check your connection and try again.";
+      render();
+    });
+  }
+
+  function hostStartRound(){
+    if (!state.hostCode) return;
+    var minsInput = document.getElementById("hostMinutes");
+    var mins = minsInput ? parseFloat(minsInput.value) : state.hostDurationMinutes;
+    if (!mins || mins < 1) mins = DEFAULT_MINUTES;
+    if (mins > 20) mins = 20;
+    state.hostDurationMinutes = mins;
+    Engine.session.startRound(state.hostCode, mins);
+  }
+
+  function hostEndRound(){
+    if (!state.hostCode) return;
+    Engine.session.endRound(state.hostCode);
+  }
+
+  var scoreTimer = null;
+  function ensureScoreLoop(){
+    if (scoreTimer) return;
+    scoreTimer = setInterval(function(){
+      if (!state.hostCode || !state.game) return;
+      Engine.players.getPlayers(state.hostCode, state.game.round).then(function(rows){
+        state.playersShown = rows || [];
+        var wrap = document.getElementById("hostScoreWrap");
+        if (wrap) wrap.innerHTML = scoreTableHtml();
+        var note = document.getElementById("hostJoinedNote");
+        if (note) note.textContent = state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round · board refreshes every 15s';
+      }).catch(function(){});
+    }, SCORE_REFRESH_MS);
+  }
+
+  function updateClockUI(){
+    var game = state.game;
+    var phase = Engine.session.derivePhase(game);
+    var pill = document.getElementById("hostPhasePill");
+    var clock = document.getElementById("hostClockNum");
+    if (pill){ pill.className = "phase-pill "+phase; pill.textContent = phaseLabel(phase); }
+    if (clock) clock.textContent = clockText(game, phase);
+    var startBtn = document.getElementById("hostStartBtn");
+    var endBtn = document.getElementById("hostEndBtn");
+    var durationBlock = document.getElementById("hostDurationBlock");
+    var running = (phase==="countdown"||phase==="live");
+    if (startBtn) startBtn.disabled = running;
+    if (endBtn) endBtn.style.display = running ? "block" : "none";
+    if (durationBlock) durationBlock.style.display = running ? "none" : "block";
+  }
+
+  var lastRound = null;
+  function startPolling(code){
+    Engine.session.startPolling(code, 1000, function(game){
+      state.game = game; state.hostChecked = true;
+      if (!game){
+        // stored code no longer exists (sheet cleared, new deployment, etc.)
+        state.hostCode = ""; lsSet("skewfeed_host_code","");
+        render();
+        return;
+      }
+      if (document.getElementById("hostPhasePill")) updateClockUI();
+      if (game.round !== lastRound){ lastRound = game.round; state.playersShown = []; render(); }
+      ensureScoreLoop();
+    });
+  }
+
+  function bind(){
+    var el;
+    if ((el = document.getElementById("hostCreateBtn"))) el.addEventListener("click", hostCreateGame);
+    if ((el = document.getElementById("hostStartBtn"))) el.addEventListener("click", hostStartRound);
+    if ((el = document.getElementById("hostEndBtn"))) el.addEventListener("click", hostEndRound);
+    if ((el = document.getElementById("hostMinutes"))) el.addEventListener("change", function(){ var v=parseFloat(this.value); if (v) state.hostDurationMinutes = v; });
+    if ((el = document.getElementById("newGameToggle"))) el.addEventListener("click", function(){ var box=document.getElementById("newGameBox"); box.style.display = box.style.display==="none"?"flex":"none"; });
+    if ((el = document.getElementById("newGameGo"))) el.addEventListener("click", function(){ var val=document.getElementById("newGameConfirm").value.trim().toUpperCase(); if (val==="NEW") hostCreateGame(); });
+    Array.prototype.forEach.call(document.querySelectorAll(".preset-chip"), function(chip){
+      chip.addEventListener("click", function(){
+        var m = parseFloat(chip.getAttribute("data-min"));
+        state.hostDurationMinutes = m;
+        var input = document.getElementById("hostMinutes"); if (input) input.value = m;
+        render();
+      });
+    });
+  }
+
+  if (state.hostCode) startPolling(state.hostCode);
+  render();
+})();
+</script>
+</body>
+</html>

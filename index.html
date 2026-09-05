@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Skew the Feed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E7EBE2; --card:#F8FAF4; --card-2:#EFF2E8; --ink:#1B1F1A; --ink-soft:#565F53;
+    --rule:#C7CFBE; --flag:#D8433E; --flag-ink:#FFF6F1; --wire:#178272; --wire-ink:#F1FBF7;
+    --under:#2F5D8A; --nonresp:#A6740F; --voluntary:#95367F; --wording:#6D4EA6; --focus:#2F5D8A;
+    --shadow: 0 1px 0 rgba(27,31,26,0.06), 0 8px 20px -12px rgba(27,31,26,0.35);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#14171A; --card:#1D2120; --card-2:#242927; --ink:#ECEFE8; --ink-soft:#A2AA9C;
+      --rule:#3A413B; --flag:#E8615C; --flag-ink:#241110; --wire:#3EBBA3; --wire-ink:#0E211D;
+      --under:#7FB0E0; --nonresp:#DDB255; --voluntary:#E28AD0; --wording:#B39AE8; --focus:#7FB0E0;
+      --shadow: 0 1px 0 rgba(0,0,0,0.4), 0 12px 28px -14px rgba(0,0,0,0.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#14171A; --card:#1D2120; --card-2:#242927; --ink:#ECEFE8; --ink-soft:#A2AA9C;
+    --rule:#3A413B; --flag:#E8615C; --flag-ink:#241110; --wire:#3EBBA3; --wire-ink:#0E211D;
+    --under:#7FB0E0; --nonresp:#DDB255; --voluntary:#E28AD0; --wording:#B39AE8; --focus:#7FB0E0;
+    --shadow: 0 1px 0 rgba(0,0,0,0.4), 0 12px 28px -14px rgba(0,0,0,0.6);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: radial-gradient(circle at 1px 1px, var(--rule) 1px, transparent 0) 0 0/16px 16px, var(--paper);
+    color:var(--ink); font-family:"IBM Plex Sans",-apple-system,system-ui,sans-serif; -webkit-font-smoothing:antialiased; min-height:100vh;
+  }
+  .mono{font-family:"IBM Plex Mono","SF Mono",monospace; font-variant-numeric:tabular-nums;}
+  .display{font-family:"Big Shoulders Display","Arial Narrow",sans-serif;}
+  a{color:inherit;} button{font-family:inherit;}
+  :focus-visible{outline:3px solid var(--focus); outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
+  .wrap{max-width:640px; margin:0 auto; padding:28px 18px 60px;}
+  .masthead{text-align:center; margin-bottom:22px;}
+  .kicker{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;}
+  .nameplate{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(40px,10vw,64px); line-height:0.9; letter-spacing:0.01em; text-transform:uppercase; text-wrap:balance; margin:0;}
+  .nameplate em{font-style:normal; color:var(--flag);}
+  .dateline{display:flex; justify-content:space-between; align-items:center; border-top:2px solid var(--ink); border-bottom:1px solid var(--rule); padding:6px 2px; margin-top:10px; font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft);}
+  .card{background:var(--card); border:1px solid var(--rule); border-radius:3px; box-shadow:var(--shadow); padding:20px 20px 22px;}
+  .stack > * + *{margin-top:16px;}
+  .eyebrow{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); margin:0 0 10px;}
+  h2.section-title{font-family:"Big Shoulders Display",sans-serif; font-weight:800; font-size:24px; letter-spacing:.01em; text-transform:uppercase; margin:0 0 4px; text-wrap:balance;}
+  p{line-height:1.5;}
+  .legend{display:grid; gap:10px;}
+  .legend-row{display:grid; grid-template-columns:14px 1fr; gap:10px; align-items:start;}
+  .swatch{width:14px; height:14px; border-radius:3px; margin-top:3px; flex:none;}
+  .legend-row b{font-weight:600;} .legend-row span{color:var(--ink-soft); font-size:14px;}
+  label{display:block; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); margin-bottom:6px;}
+  input[type=text], input[type=number], select{width:100%; padding:12px 12px; border-radius:3px; border:1.5px solid var(--rule); background:var(--card-2); color:var(--ink); font-size:16px; font-family:inherit;}
+  input[type=text]:focus, input[type=number]:focus, select:focus{border-color:var(--focus);}
+  .field + .field{margin-top:14px;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px 18px; border-radius:3px; border:none; cursor:pointer; font-family:"Big Shoulders Display",sans-serif; font-weight:800; font-size:19px; letter-spacing:.03em; text-transform:uppercase; background:var(--ink); color:var(--paper); transition:transform .08s ease;}
+  .btn:active{transform:scale(0.98);} .btn:disabled{opacity:.45; cursor:not-allowed;}
+  .btn-flag{background:var(--flag); color:var(--flag-ink);}
+  .btn-ghost{background:transparent; color:var(--ink); border:1.5px solid var(--rule);}
+  .btn-row{display:flex; gap:10px; margin-top:14px;} .btn-row .btn{width:auto; flex:1;}
+  .err{color:var(--flag); font-size:13px; margin-top:8px; min-height:16px;}
+  .ticker{border-top:1px dashed var(--rule); margin-top:26px; padding-top:14px;}
+  .ticker-title{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;}
+  .ticker-title .eyebrow{margin:0;}
+  .ticker-row{display:grid; grid-template-columns:22px 1fr auto; gap:10px; align-items:center; padding:7px 0; border-bottom:1px solid var(--rule); font-size:14px;}
+  .ticker-row:last-child{border-bottom:none;}
+  .ticker-rank{font-family:"IBM Plex Mono",monospace; color:var(--ink-soft); font-size:12px;}
+  .ticker-name{font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .ticker-score{font-family:"IBM Plex Mono",monospace; font-weight:600;}
+  .empty-note{color:var(--ink-soft); font-size:13px; font-style:italic;}
+  .link-quiet{background:none; border:none; color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; font-size:12px; text-decoration:underline; cursor:pointer; padding:6px 0;}
+  .pulse-dot{display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--flag); margin-right:8px; animation:pulseDot 1.4s ease-in-out infinite;}
+  @keyframes pulseDot{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+  .lobby-status{display:flex; align-items:center; font-family:"IBM Plex Mono",monospace; font-size:13px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em;}
+  .mask{position:fixed; inset:0; z-index:80; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; background:#12100E; color:#F6F1E4;}
+  .mask-kicker{font-family:"IBM Plex Mono",monospace; font-size:13px; letter-spacing:.2em; text-transform:uppercase; opacity:.7;}
+  .mask-num{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(110px,34vw,240px); line-height:1; color:#E8615C;}
+  .mask-sub{font-family:"IBM Plex Mono",monospace; font-size:13px; opacity:.55; max-width:320px; text-align:center;}
+  .hud{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:14px;}
+  .hud-block{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em;}
+  .hud-num{font-size:20px; font-weight:600; color:var(--ink); display:block;}
+  .timerbar{height:8px; background:var(--card-2); border:1px solid var(--rule); border-radius:5px; overflow:hidden; margin-bottom:20px;}
+  .timerfill{height:100%; background:var(--flag); width:100%; transition:width 1s linear, background .3s;}
+  .postcard{position:relative; background:var(--card); border:1px solid var(--rule); border-radius:10px; box-shadow:var(--shadow); overflow:hidden;}
+  .post-head{display:flex; align-items:center; gap:10px; padding:14px 16px 10px;}
+  .avatar{width:38px; height:38px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; font-family:"Big Shoulders Display",sans-serif; font-weight:800; font-size:16px; color:var(--flag-ink); background:var(--flag);}
+  .post-who{min-width:0;}
+  .post-handle{font-weight:700; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .post-meta{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-soft);}
+  .post-tag{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); border:1px solid var(--rule); border-radius:20px; padding:3px 9px; flex:none;}
+  .post-body{padding:2px 16px 18px; font-size:18px; line-height:1.45; text-wrap:balance;}
+  .post-foot{display:flex; gap:20px; padding:10px 16px; border-top:1px solid var(--rule); font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft);}
+  .stamp-overlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(20,23,20,0.28); opacity:0; pointer-events:none; transition:opacity .15s ease;}
+  .stamp-overlay.show{opacity:1; pointer-events:auto;}
+  .stamp{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(22px,6vw,34px); text-transform:uppercase; letter-spacing:.02em; padding:10px 22px; border-radius:6px; border:4px solid currentColor; transform:rotate(-7deg); text-align:center; box-shadow:0 6px 18px rgba(0,0,0,0.25);}
+  .stamp.correct{color:var(--wire); background:var(--wire-ink);}
+  .stamp.wrong{color:var(--flag); background:var(--flag-ink);}
+  .explain{background:var(--card); border:1px solid var(--rule); border-top:none; border-radius:0 0 10px 10px; margin-top:-1px; padding:14px 16px 16px; font-size:14.5px; color:var(--ink-soft); display:none;}
+  .explain.show{display:block;} .explain b{color:var(--ink);}
+  .verdicts{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:18px;}
+  .verdict-btn{padding:14px 10px; border-radius:6px; border:1.5px solid var(--rule); background:var(--card); color:var(--ink); cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:3px; transition:border-color .12s, transform .08s;}
+  .verdict-btn:active{transform:scale(0.98);}
+  .verdict-btn .vlabel{font-weight:700; font-size:14.5px;} .verdict-btn .vsub{font-size:11.5px; color:var(--ink-soft);}
+  .verdict-btn .vbar{width:22px; height:4px; border-radius:2px; margin-bottom:2px;}
+  .verdict-btn[data-cat="under"] .vbar{background:var(--under);}
+  .verdict-btn[data-cat="nonresponse"] .vbar{background:var(--nonresp);}
+  .verdict-btn[data-cat="voluntary"] .vbar{background:var(--voluntary);}
+  .verdict-btn[data-cat="wording"] .vbar{background:var(--wording);}
+  .verdict-btn[data-cat="clean"] .vbar{background:var(--wire);}
+  .verdict-btn:disabled{opacity:.5; cursor:default;} .verdict-btn.clean-btn{grid-column:1 / -1;}
+  .score-hero{text-align:center; padding:8px 0 4px;}
+  .score-num{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:88px; line-height:.9; color:var(--flag);}
+  .score-cap{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft);}
+  .stat-row{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-top:18px;}
+  .stat-tile{background:var(--card-2); border:1px solid var(--rule); border-radius:6px; padding:12px 10px; text-align:center;}
+  .stat-tile .n{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:22px; display:block;}
+  .stat-tile .l{font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft);}
+  .corrections{border:1px dashed var(--rule); border-radius:6px; padding:14px; margin-top:18px;}
+  .corrections .eyebrow{margin-bottom:8px;}
+  .corr-row{display:flex; justify-content:space-between; font-size:14px; padding:5px 0; border-bottom:1px solid var(--rule);}
+  .corr-row:last-child{border:none;}
+  .lb-head{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;}
+  table.lb{width:100%; border-collapse:collapse; margin-top:14px; font-size:14px;}
+  table.lb th{text-align:left; font-family:"IBM Plex Mono",monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); padding:0 6px 8px; border-bottom:2px solid var(--ink);}
+  table.lb td{padding:9px 6px; border-bottom:1px solid var(--rule); vertical-align:middle;}
+  table.lb td.num, table.lb th.num{font-family:"IBM Plex Mono",monospace; text-align:right; font-variant-numeric:tabular-nums;}
+  .rank-badge{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:600; background:var(--card-2); color:var(--ink-soft);}
+  .rank-badge.top{background:var(--flag); color:var(--flag-ink);}
+  .lb-empty{padding:30px 10px; text-align:center; color:var(--ink-soft); font-size:14px;}
+  .backlink{display:inline-block; margin-bottom:14px; font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft); text-decoration:none; cursor:pointer; background:none; border:none; padding:0;}
+  .foot-note{text-align:center; margin-top:26px; font-size:11px; color:var(--ink-soft);}
+  .teacher-link{display:block; text-align:center; margin-top:10px; font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink-soft); opacity:.6; text-decoration:none; background:none; border:none; cursor:pointer;}
+  .code-input{text-transform:uppercase; text-align:center; letter-spacing:.3em; font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:22px !important;}
+</style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+
+<script src="../engine.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---- one-time config for this game ----
+  Engine.configure({
+    appsScriptUrl: "https://script.google.com/macros/s/AKfycbwdGJAOLH5JskqJTckVxZuOGcu-nBAEj0DXe5M2tKcWHby4ZfVRM_1-IL11WA_g0iIr7Q/exec",
+    gameType: "skew-the-feed"
+  });
+
+  /* ---------------------------------------------------------------
+     CONTENT BANK — identical to the original game.
+     cat: under | nonresponse | voluntary | wording | clean
+  ----------------------------------------------------------------*/
+  var BANK = [
+    {tier:1, handle:"@CampusVoice", tag:"Instagram Story", time:"2h", body:"We put a poll on our Instagram story asking if students think dining hall food has gotten worse. 91% said yes! Story archived.", cat:"voluntary", why:"Only students who saw the story <b>and</b> felt strongly enough to tap in are counted &mdash; people who are fine with the food have little reason to respond."},
+    {tier:1, handle:"@RiverdaleDistrict", tag:"Mailer", time:"1d", body:"Mailed a survey to all 4,000 families asking about the new school start time. Only 310 came back.", cat:"nonresponse", why:"The survey reached everyone &mdash; that's not undercoverage. The problem is that most families never sent it back, and the 310 who did are probably the most opinionated ones."},
+    {tier:1, handle:"@QuickPollBot", tag:"Field Note", time:"5h", body:"Want to know what the school really thinks about the cafeteria? We asked the first 50 kids to walk into the library before first period.", cat:"under", why:"Kids who take a different route, arrive late, or never go to the library that period never had a chance of being picked &mdash; the sampling frame itself leaves them out."},
+    {tier:1, handle:"@TownHallSurvey", tag:"City Poll", time:"3h", body:"Survey question: &ldquo;Do you support wasting taxpayer money on a pointless new bike lane?&rdquo; 78% said no.", cat:"wording", why:"&ldquo;Wasting&rdquo; and &ldquo;pointless&rdquo; are loaded words baked into the question &mdash; they push people toward &ldquo;no&rdquo; regardless of their real opinion."},
+    {tier:1, handle:"@StatDeptNews", tag:"Methods Memo", time:"6h", body:"Researchers numbered every locker in the school 1&ndash;500, used a random number generator to pick 60, and interviewed each of those students in person.", cat:"clean", why:"Every student had a known, equal chance of selection, and there's no loaded wording or self-selection &mdash; this is a genuine random sample."},
+    {tier:1, handle:"@NightlyDataDesk", tag:"Call-in Show", time:"4h", body:"A radio show asked listeners to call in and share whether they trust the mayor. Lines lit up: 2,000 calls, 12% said yes.", cat:"voluntary", why:"People with the strongest feelings &mdash; usually the angriest ones &mdash; are the ones motivated to call a live show. Quiet moderates never dial in."},
+    {tier:1, handle:"@CommuterWatch", tag:"Field Note", time:"8h", body:"To study commute times across the whole city, researchers stood at one downtown train platform during rush hour and asked riders how long their commute was.", cat:"under", why:"Anyone who drives, bikes, or rides a different line never had a chance of being chosen &mdash; one platform can't represent &ldquo;the whole city.&rdquo;"},
+    {tier:1, handle:"@ParentPTA", tag:"Paper Survey", time:"2d", body:"Every 5th grader was sent home with a paper survey about the new homework policy for a parent to sign and return. 22% came back completed.", cat:"nonresponse", why:"Every family got a fair shot &mdash; that rules out undercoverage. But the ones who bothered to send it back likely feel more strongly than the ones who didn't."},
+    {tier:1, handle:"@HealthTrackerApp", tag:"In-App Poll", time:"1h", body:"New survey: &ldquo;Most doctors agree the leading treatment works wonders. Do you agree it's effective?&rdquo; 88% said yes.", cat:"wording", why:"Telling people &ldquo;most doctors agree&rdquo; right before asking primes them to agree too &mdash; that's a leading question, not a neutral one."},
+    {tier:2, handle:"@VarsitySurveyClub", tag:"Clipboard Poll", time:"3h", body:"We handed a clipboard to every single student as they left the pep rally and asked them to rate school spirit 1&ndash;10. All 600 attendees answered.", cat:"under", why:"Everyone who was asked did answer &mdash; that's not nonresponse. But only students who showed up to the pep rally could ever be picked, which excludes everyone with low school spirit who skipped it."},
+    {tier:2, handle:"@CityCouncilPoll", tag:"Email Survey", time:"2w", body:"An online form was emailed to all 15,000 registered voters in the district. It's been open for two weeks. Only 480 people have submitted it so far.", cat:"nonresponse", why:"The list covered the whole population, so this isn't undercoverage &mdash; the problem is that almost everyone selected is choosing not to respond."},
+    {tier:2, handle:"@ReviewRoundup", tag:"Comment Section", time:"12h", body:"Comment section is popping off &mdash; 4,000 people left a rating for the new season finale on the show's website.", cat:"voluntary", why:"Nobody was selected; people opted themselves in. Viewers with the strongest reactions &mdash; love or hate &mdash; are the ones who bother to leave a rating."},
+    {tier:2, handle:"@WellnessWeekly", tag:"Reader Poll", time:"9h", body:"Poll: &ldquo;Given how many people say self-checkout lines are miserable, do you avoid them?&rdquo; 71% said yes.", cat:"wording", why:"The setup plants an assumption (&ldquo;given how many people say...&rdquo;) before the real question is even asked &mdash; that's response bias from wording, not a sampling flaw."},
+    {tier:2, handle:"@DistrictResearch", tag:"Methods Memo", time:"1d", body:"A stats class randomly sampled 40 students from the full enrollment list, then tracked down and interviewed every single one &mdash; even the ones who were absent that day.", cat:"clean", why:"Random selection from a complete list, plus real effort to reach everyone chosen, closes off both undercoverage and nonresponse."},
+    {tier:2, handle:"@FreshmanFocus", tag:"Class Project", time:"4h", body:"We only got 15 freshmen to answer our survey about the cafeteria, so our numbers might bounce around a lot from group to group.", cat:"clean", why:"A small sample makes results less precise &mdash; more variability &mdash; but that's not the same as bias. Bias comes from a flawed selection method, not from sample size."},
+    {tier:2, handle:"@AlumniOutreach", tag:"Mailer", time:"3d", body:"Every graduate from the last 10 years was mailed a satisfaction survey. Response rate: 6%. Most of the 6% who replied had stayed in close contact with the school.", cat:"nonresponse", why:"The mailing list included every graduate, so the frame is fine &mdash; but the tiny sliver who mailed it back is self-selecting and likely more positive than average."},
+    {tier:2, handle:"@QuietTownPoll", tag:"Phone Survey", time:"6h", body:"A researcher wanted opinions on the new highway, so she only interviewed people whose numbers were listed in the printed phone book.", cat:"under", why:"Younger residents and anyone with only a cell phone are never in a printed phone book &mdash; they never had a chance of being chosen. That's a flawed frame, not a response problem."},
+    {tier:2, handle:"@SportsDeskLive", tag:"Exit Poll", time:"1h", body:"Fans who stayed until the final buzzer were asked to rate the team's season on their way out. Everyone asked gave an answer.", cat:"under", why:"Fans who left early &mdash; often the most frustrated ones &mdash; never had a chance to be asked. The sampling frame itself is skewed toward die-hard fans."},
+    {tier:3, handle:"@DataDeskInvestigates", tag:"Investigation", time:"1d", body:"A retailer surveyed shoppers who signed up for its loyalty app, asking if they'd recommend the store. 96% said yes &mdash; but only 3% of app users ever opened the survey.", cat:"nonresponse", why:"Loyalty-app users are a fine target population here &mdash; the frame isn't the issue. A 3% response rate means the &ldquo;sample&rdquo; is really just the small group who felt strongly enough to bother."},
+    {tier:3, handle:"@ScienceBriefs", tag:"Study Note", time:"7h", body:"Interviewers asked, &ldquo;On a scale of 1 to 10, how would you rate the new medication's side effects?&rdquo; with no mention of benefits.", cat:"wording", why:"Focusing only on side effects &mdash; and leaving out benefits entirely &mdash; frames the question in a way that nudges answers, even without obviously loaded words."},
+    {tier:3, handle:"@MetroTransitData", tag:"Methods Memo", time:"2d", body:"Researchers split the city into 12 neighborhoods, randomly chose 20 households from each using an address list, and visited in person until every selected household responded.", cat:"clean", why:"Stratified random sampling from a full address list, with real follow-through on every household, is about as close to bias-free as sampling gets."},
+    {tier:3, handle:"@PulseOfTheOffice", tag:"Suggestion Box", time:"1mo", body:"HR left a suggestion box in the breakroom for anonymous feedback on the new policy. After a month, 40 notes had been dropped in.", cat:"voluntary", why:"Employees choose whether to walk over and drop in a note &mdash; people with a complaint are far more likely to show up in the box than people who are fine with the policy."},
+    {tier:3, handle:"@YouthSportsLeague", tag:"Phone Outreach", time:"5h", body:"A coach called the parents of players from last year's championship roster to ask about the league's new registration fees.", cat:"under", why:"Last year's championship roster leaves out every family that joined this year, switched teams, or wasn't on a winning team &mdash; a big chunk of the real population never had a chance to be picked."},
+    {tier:3, handle:"@CivicTechLab", tag:"Budget Survey", time:"9h", body:"The city's new budget survey opened with: &ldquo;The city has cut library funding for three years straight. Should libraries get more money?&rdquo; 89% said yes.", cat:"wording", why:"The intro sentence supplies an emotional justification right before the question &mdash; steering respondents toward a particular answer before they've even been asked."},
+    {tier:3, handle:"@HallwayPulse", tag:"Class Project", time:"1d", body:"A student reporter randomly picked 30 lockers from the master list and interviewed whoever owned each one &mdash; rescheduling with the two who were absent until she caught them.", cat:"clean", why:"Random selection from a complete list, plus persistence in reaching absentees, closes off both undercoverage and nonresponse."},
+    {tier:3, handle:"@FitnessTrackerHQ", tag:"Push Notification", time:"3h", body:"The app pushed a notification asking &ldquo;Rate your workout!&rdquo; right after every session. Only 8% of users ever tap it &mdash; almost always after a personal best.", cat:"voluntary", why:"Users decide in the moment whether to respond, and they're most likely to do it when they're already feeling good &mdash; a self-selected, skewed slice of sessions."},
+    {tier:3, handle:"@RegionalNews9", tag:"On-Air Poll", time:"30m", body:"To gauge opinion on the new stadium tax, a reporter asked, &ldquo;Isn't it exciting that our city could finally get world-class sports facilities?&rdquo; before asking if viewers support the tax.", cat:"wording", why:"The lead-in frames the topic positively before the real question &mdash; priming a favorable response. Classic wording and framing bias."},
+    {tier:1, handle:"@LunchLineDigest", tag:"Lounge Poll", time:"4h", body:"We asked the students already sitting in the honors lounge whether the school offers enough AP classes. 95% said yes.", cat:"under", why:"Students who chose to be in the honors lounge already skew toward kids taking lots of APs &mdash; anyone outside that room never had a chance to be asked."},
+    {tier:1, handle:"@StoreFrontSurvey", tag:"Receipt Code", time:"1d", body:"Every 20th receipt printed a &ldquo;call this number for a survey&rdquo; code. Of the customers who got the code, hardly anyone calls in.", cat:"nonresponse", why:"The customers were selected fairly and systematically &mdash; the frame is fine. The problem is that almost none of the selected people follow through and call."},
+    {tier:1, handle:"@WeekendMarket", tag:"Vendor Poll", time:"2h", body:"A vendor asked, &ldquo;You wouldn't want to hurt underpaid local farmers by skipping the farmers market, would you?&rdquo;", cat:"wording", why:"The question guilt-trips respondents toward one answer before they can express an honest opinion."},
+    {tier:1, handle:"@AllStarBallot", tag:"Fan Vote", time:"6h", body:"Fans could vote as many times as they wanted on the league's website for their favorite player. One fan's account cast 4,000 votes.", cat:"voluntary", why:"Nobody was sampled &mdash; anyone could opt in, and here even the intensity of participation is unlimited, amplifying the most passionate fans' voices."},
+    {tier:1, handle:"@LibraryDesk", tag:"Methods Memo", time:"9h", body:"Staff randomly chose 50 barcodes from the full catalog of checked-out books and called those cardholders about the new late-fee policy, redialing until each one answered.", cat:"clean", why:"Random selection from a complete list, plus persistent follow-up, leaves no group excluded and nobody self-selecting."},
+    {tier:1, handle:"@NightShiftReport", tag:"Field Note", time:"11h", body:"A factory only interviewed workers on the day shift about the new safety equipment, since that's when the HR office is staffed.", cat:"under", why:"Night- and swing-shift workers never have a chance to be selected simply because of when the researchers happen to be around &mdash; a frame problem, not a response problem."},
+    {tier:2, handle:"@RideshareInsights", tag:"In-App Survey", time:"3d", body:"The app emailed a satisfaction survey after every trip for a month. Response rate hovered around 4%, but that 4% skewed heavily toward five-star and one-star reviews.", cat:"nonresponse", why:"Every rider had the chance to respond &mdash; no undercoverage. Only the ones with the strongest feelings, good or bad, bothered to actually fill it out."},
+    {tier:2, handle:"@ParkAndRec", tag:"Field Note", time:"1d", body:"A city parks department only has funding to survey people at the three parks with staffed visitor centers, out of the city's 40 total parks.", cat:"under", why:"The 37 parks without visitor centers &mdash; and everyone who only uses those &mdash; never has a chance of being included in the sampling frame."},
+    {tier:2, handle:"@MidtermPulse", tag:"Exit Survey", time:"5h", body:"A teacher asked, &ldquo;Wouldn't you agree this unit's homework load was fair, given how much material we covered?&rdquo; on the exit survey.", cat:"wording", why:"&ldquo;Given how much material we covered&rdquo; supplies a justification before asking, nudging students toward agreeing it was fair."},
+    {tier:2, handle:"@StreamStats", tag:"Methods Memo", time:"2d", body:"A streaming platform picks a genuinely random 1-in-10,000 sample of all subscriber accounts each month and pulls exact watch history straight from server logs &mdash; no survey involved.", cat:"clean", why:"This isn't even a survey with response issues &mdash; it's a random sample of measured behavior, with no opinion question and no one able to opt out of being logged."},
+    {tier:2, handle:"@VoterFile", tag:"Phone Poll", time:"7h", body:"Pollsters called landline numbers from an old registration database. Only 18% of adults in the district still have a landline, and most are over 60.", cat:"under", why:"Adults without a landline are structurally excluded from ever being reached &mdash; the sampling frame itself is missing most of the population."},
+    {tier:2, handle:"@GameNightSurvey", tag:"Mail-In Card", time:"2w", body:"A board game company includes a &ldquo;rate this game&rdquo; card in the box. Roughly 2% of buyers ever mail it in, mostly the ones who either loved it or want a refund.", cat:"voluntary", why:"Buyers decide entirely on their own whether to send in the card, and the ones who do tend to have unusually strong opinions in either direction."},
+    {tier:3, handle:"@LongitudinalHealthStudy", tag:"Investigation", time:"3d", body:"Researchers randomly selected 2,000 patients from insurance records, but the survey was only offered in English, and 30% of the selected group primarily speaks another language.", cat:"under", why:"The random selection was fine, but offering the survey in only one language quietly excludes part of the selected group from ever participating &mdash; still a coverage problem, not a response one."},
+    {tier:3, handle:"@AnnualReviewData", tag:"HR Report", time:"1w", body:"Employees rate their manager anonymously once a year. HR reports a 97% completion rate because unfinished reviews block employees from seeing their own pay stub until submitted.", cat:"clean", why:"A near-universal, effectively mandatory response rate means almost nobody is missing &mdash; once everyone is compelled to respond, self-selection and nonresponse mostly disappear as concerns."},
+    {tier:3, handle:"@CampaignTracker", tag:"Internal Poll", time:"4h", body:"A political campaign's internal poll only calls numbers from their own supporter database, built from past rally sign-ups.", cat:"under", why:"Anyone who has never attended a rally or signed up isn't in the calling list at all &mdash; the frame is limited to people already inclined to support the campaign."},
+    {tier:3, handle:"@ProductLaunchTeam", tag:"Internal Test", time:"8h", body:"Before shipping, the team asked 20 employees in the building to test the new app and rate it, since a full public beta wasn't ready yet.", cat:"under", why:"Coworkers are not a stand-in for the general public the app is built for &mdash; the sampling frame itself leaves out the actual target population entirely."},
+    {tier:3, handle:"@ClimateSurveyDesk", tag:"Phone Poll", time:"1d", body:"Interviewers opened with, &ldquo;Given the extreme weather this year, how concerned are you about climate change?&rdquo; before asking respondents to rate concern 1&ndash;10.", cat:"wording", why:"Mentioning &ldquo;extreme weather this year&rdquo; right before the question anchors respondents toward higher concern, regardless of their baseline view."},
+    {tier:3, handle:"@AdmissionsOffice", tag:"Methods Memo", time:"2w", body:"A university mailed a survey to every enrolled student with a follow-up plan: a second mailing, then a phone call, then an in-person dorm visit for anyone who still hadn't replied after 3 weeks.", cat:"clean", why:"Full-population mailing plus real follow-through on nonresponders closes off the usual gaps &mdash; about as thorough as bias-prevention gets."}
+  ];
+
+  var CATS = {
+    under:       {label:"Undercoverage",       sub:"Frame leaves a group out",     color:"var(--under)"},
+    nonresponse: {label:"Nonresponse",         sub:"Chosen people don't answer",   color:"var(--nonresp)"},
+    voluntary:   {label:"Voluntary Response",  sub:"Sample selects itself",        color:"var(--voluntary)"},
+    wording:     {label:"Wording / Response",  sub:"Question sways the answer",    color:"var(--wording)"},
+    clean:       {label:"No Bias Found",       sub:"Random & neutrally worded",    color:"var(--wire)"}
+  };
+  var CAT_ORDER = ["under","nonresponse","voluntary","wording","clean"];
+  var TIER_POINTS = {1:10, 2:15, 3:20};
+  var DEFAULT_MINUTES = 5;
+
+  /* ---------------------------------------------------------------
+     STATE
+  ----------------------------------------------------------------*/
+  var state = {
+    screen: "register",   // register | briefing | lobby | play | results | leaderboard
+    gameCode: "",
+    joinError: "",
+    checking: false,
+
+    game: null,
+    lastPhase: "idle",
+    joinedRound: -1,
+
+    deck: [], idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, attempted: 0, misses: {},
+    secondsLeft: 0, timerId: null, answering: false,
+
+    lbCache: [], lbLoaded: false
+  };
+
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function shuffle(arr){ var a=arr.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+  function buildDeck(){
+    var t1=shuffle(BANK.filter(function(c){return c.tier===1;}));
+    var t2=shuffle(BANK.filter(function(c){return c.tier===2;}));
+    var t3=shuffle(BANK.filter(function(c){return c.tier===3;}));
+    return t1.concat(t2,t3);
+  }
+
+  function lsGet(k){ try{ return localStorage.getItem(k)||""; }catch(e){ return ""; } }
+  function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+
+  state.gameCode = lsGet("skewfeed_code");
+
+  /* ---------------------------------------------------------------
+     RENDER ROUTER
+  ----------------------------------------------------------------*/
+  function render(){
+    var app = document.getElementById("app");
+    if (state.screen === "register") app.innerHTML = viewRegister();
+    else if (state.screen === "briefing") app.innerHTML = viewBriefing();
+    else if (state.screen === "lobby") app.innerHTML = viewLobby();
+    else if (state.screen === "play") app.innerHTML = viewPlay();
+    else if (state.screen === "results") app.innerHTML = viewResults();
+    else if (state.screen === "leaderboard") app.innerHTML = viewLeaderboard();
+    bind();
+  }
+
+  function masthead(kicker){
+    return '<div class="masthead"><div class="kicker">' + esc(kicker || "AP STATISTICS · UNIT 1 FIELD EXERCISE") + '</div>' +
+      '<h1 class="nameplate">Skew <em>the</em> Feed</h1>' +
+      '<div class="dateline"><span>Bias &amp; Nonrandom Sampling Desk</span><span>Newsroom Edition</span></div></div>';
+  }
+
+  /* ---------------------------------------------------------------
+     REGISTER — game code + student ID (no accounts, no free-typed name)
+  ----------------------------------------------------------------*/
+  function viewRegister(){
+    var legendRows = CAT_ORDER.map(function(k){
+      var c = CATS[k];
+      return '<div class="legend-row"><div class="swatch" style="background:'+c.color+'"></div><div><b>'+esc(c.label)+'.</b> <span>'+esc(c.sub)+'</span></div></div>';
+    }).join("");
+    return '' +
+      masthead() +
+      '<div class="card stack">' +
+        '<div><p class="eyebrow">Your Assignment</p><h2 class="section-title">Work the desk</h2>' +
+        '<p>Posts, polls, and headlines will cross your desk one at a time. When the news desk kicks off the shift, stamp each one with the flaw in how the data was collected &mdash; or clear it as clean.</p></div>' +
+        '<div class="legend">' + legendRows + '</div>' +
+      '</div>' +
+      '<div class="card stack" style="margin-top:16px;">' +
+        '<div><p class="eyebrow">Byline</p><h2 class="section-title">Sign in to the desk</h2></div>' +
+        '<div class="field"><label for="codeInput">Game code (from your teacher\'s screen)</label>' +
+          '<input id="codeInput" class="code-input" type="text" maxlength="6" placeholder="&mdash; &mdash; &mdash; &mdash;" value="'+esc(state.gameCode)+'" autocomplete="off" autocapitalize="characters" />' +
+          '<p style="font-size:11.5px; color:var(--ink-soft); margin:6px 2px 0;">Letters and numbers only &mdash; codes never use 0, 1, I, L, or O.</p></div>' +
+        '<div class="field"><label for="idInput">Your student ID</label>' +
+          '<input id="idInput" type="text" inputmode="numeric" maxlength="10" placeholder="e.g. 19136" value="'+esc(Engine.identity.studentId)+'" /></div>' +
+        '<div class="err" id="regErr">' + esc(state.joinError) + '</div>' +
+        '<button class="btn btn-flag" id="startBtn">Join the Newsroom</button>' +
+      '</div>' +
+      leaderboardPreview() +
+      '<div style="text-align:center;"><button class="link-quiet" id="toLbBtn">View full leaderboard &rarr;</button></div>' +
+      '<p class="foot-note">Every completed shift is logged to the shared newsroom board.</p>';
+  }
+
+  function leaderboardPreview(){
+    var rows = state.lbCache.slice(0,5);
+    var body = rows.length ? rows.map(function(r,i){
+      return '<div class="ticker-row"><span class="ticker-rank">'+(i+1)+'</span><span class="ticker-name">'+esc(r.displayName)+'</span><span class="ticker-score mono">'+r.score+'</span></div>';
+    }).join("") : '<p class="empty-note">No shifts filed yet &mdash; be the first byline on the board.</p>';
+    return '<div class="ticker"><div class="ticker-title"><p class="eyebrow" style="margin:0;">Wire Report &mdash; Top Scores</p></div><div class="ticker-list">'+body+'</div></div>';
+  }
+
+  /* ---------------------------------------------------------------
+     BRIEFING
+  ----------------------------------------------------------------*/
+  function viewBriefing(){
+    return '' + masthead("Assignment Briefing") +
+      '<div class="card stack">' +
+        '<div><p class="eyebrow">'+esc(Engine.identity.displayName)+' &middot; Period '+esc(Engine.identity.period)+'</p><h2 class="section-title">How scoring works</h2></div>' +
+        '<p>Each post is worth more the trickier it gets: <b>10 pts</b> for an easy call, <b>15 pts</b> for a harder one, <b>20 pts</b> for the trickiest. Chain <b>3+ correct calls in a row</b> for a streak bonus.</p>' +
+        '<p>Wrong calls break your streak and cost you nothing else &mdash; but read the correction, it\'s worth more than the points.</p>' +
+        '<p>The whole newsroom starts together. Head to the lobby and wait for the news desk to kick off the shift.</p>' +
+        '<button class="btn btn-flag" id="goBtn">Enter the Lobby</button>' +
+      '</div>';
+  }
+
+  /* ---------------------------------------------------------------
+     LOBBY
+  ----------------------------------------------------------------*/
+  function viewLobby(){
+    var phase = Engine.session.derivePhase(state.game);
+    if (phase === "countdown") return Engine.ui.maskHtml(state.game, "Shift starts in", "Posts are about to hit the wire &mdash; get ready to make the call.");
+    var msg = "Waiting for the news desk to start the shift&hellip;";
+    if (phase === "ended") msg = "The last shift just wrapped. Waiting for the next one to start&hellip;";
+    return '' + masthead("Newsroom Lobby") +
+      '<div class="card stack" style="text-align:center;">' +
+        '<div><p class="eyebrow">'+esc(Engine.identity.displayName)+' &middot; Period '+esc(Engine.identity.period)+'</p><h2 class="section-title">You&rsquo;re checked in</h2></div>' +
+        '<div class="lobby-status" style="justify-content:center;"><span class="pulse-dot"></span>'+msg+'</div>' +
+        '<p style="color:var(--ink-soft); font-size:13.5px;">Keep this tab open &mdash; the shift starts for everyone at once, no button to press.</p>' +
+      '</div>' +
+      '<div style="text-align:center; margin-top:16px;"><button class="link-quiet" id="toLbBtn">View full leaderboard &rarr;</button></div>';
+  }
+
+  /* ---------------------------------------------------------------
+     PLAY
+  ----------------------------------------------------------------*/
+  function currentCard(){ return state.deck[state.idx]; }
+
+  function beginLocalRound(){
+    state.deck = buildDeck(); state.idx = 0; state.score = 0; state.streak = 0; state.bestStreak = 0;
+    state.correct = 0; state.attempted = 0; state.misses = {}; state.answering = false;
+    state.joinedRound = state.game ? state.game.round : 0;
+    state.screen = "play";
+    pushPlayerProgress();
+    render();
+    clearInterval(state.timerId);
+    state.timerId = setInterval(playTick, 1000);
+    playTick();
+  }
+
+  function playTick(){
+    if (!state.game) return;
+    var remaining = Math.max(0, Math.round((state.game.gameEndsAt - Date.now())/1000));
+    state.secondsLeft = remaining;
+    var fill = document.getElementById("timerFill");
+    if (fill){
+      var pct = Math.max(0, Math.round((remaining/state.game.durationSec)*100));
+      fill.style.width = pct+"%"; fill.style.background = pct>33 ? "var(--flag)" : "var(--nonresp)";
+    }
+    var secEl = document.getElementById("secLeft");
+    if (secEl) secEl.textContent = remaining+"s";
+    if (remaining <= 0){ clearInterval(state.timerId); finishRun(); render(); }
+  }
+
+  function viewPlay(){
+    if (state.idx >= state.deck.length) state.deck = state.deck.concat(shuffle(BANK));
+    var card = currentCard();
+    var total = (state.game && state.game.durationSec) || 1;
+    var pct = Math.max(0, Math.round((state.secondsLeft/total)*100));
+    var barColor = pct>33 ? "var(--flag)" : "var(--nonresp)";
+    var initials = card.handle.replace("@","").slice(0,2).toUpperCase();
+    var btns = CAT_ORDER.map(function(k){
+      var c = CATS[k]; var cls = "verdict-btn"+(k==="clean"?" clean-btn":"");
+      return '<button class="'+cls+'" data-cat="'+k+'" '+(state.answering?"disabled":"")+'>' +
+        '<span class="vbar"></span><span class="vlabel">'+esc(c.label)+'</span><span class="vsub">'+esc(c.sub)+'</span></button>';
+    }).join("");
+    return '' +
+      '<div class="hud">' +
+        '<div class="hud-block">Score<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div>' +
+        '<div class="hud-block">Streak<span class="hud-num mono" id="streakNum">'+state.streak+'</span></div>' +
+        '<div class="hud-block">Time Left<span class="hud-num mono" id="secLeft">'+state.secondsLeft+'s</span></div>' +
+      '</div>' +
+      '<div class="timerbar"><div class="timerfill" id="timerFill" style="width:'+pct+'%; background:'+barColor+';"></div></div>' +
+      '<div class="postcard" id="postcard">' +
+        '<div class="post-head"><div class="avatar">'+esc(initials)+'</div>' +
+          '<div class="post-who"><div class="post-handle">'+esc(card.handle)+'</div><div class="post-meta">'+esc(card.time)+' ago</div></div>' +
+          '<div class="post-tag">'+esc(card.tag)+'</div></div>' +
+        '<div class="post-body">'+card.body+'</div>' +
+        '<div class="post-foot"><span>&#128172; Replies</span><span>&#8635; Reposts</span><span>&#9825; Likes</span></div>' +
+        '<div class="stamp-overlay" id="stampOverlay"><div class="stamp" id="stampEl"></div></div>' +
+      '</div>' +
+      '<div class="explain" id="explainBox"></div>' +
+      '<div class="verdicts" id="verdictGrid">'+btns+'</div>';
+  }
+
+  function handleAnswer(cat){
+    if (state.answering) return;
+    var card = currentCard(); if (!card) return;
+    state.answering = true; state.attempted += 1;
+    var isCorrect = (cat === card.cat);
+    if (isCorrect){
+      state.correct += 1; state.streak += 1; state.bestStreak = Math.max(state.bestStreak, state.streak);
+      var bonus = state.streak >= 3 ? (state.streak-2)*5 : 0;
+      state.score += TIER_POINTS[card.tier] + bonus;
+    } else {
+      state.streak = 0; state.misses[card.cat] = (state.misses[card.cat]||0)+1;
+    }
+    document.getElementById("scoreNum").textContent = state.score;
+    document.getElementById("streakNum").textContent = state.streak;
+    Array.prototype.forEach.call(document.querySelectorAll(".verdict-btn"), function(b){ b.disabled = true; });
+    var overlay = document.getElementById("stampOverlay"); var stampEl = document.getElementById("stampEl");
+    stampEl.className = "stamp "+(isCorrect?"correct":"wrong");
+    stampEl.textContent = isCorrect ? "Confirmed" : "Misfiled";
+    overlay.classList.add("show");
+    var box = document.getElementById("explainBox");
+    box.innerHTML = '<b>'+esc(CATS[card.cat].label)+':</b> '+card.why;
+    box.classList.add("show");
+    pushPlayerProgress();
+    setTimeout(function(){
+      state.idx += 1; state.answering = false;
+      if (state.secondsLeft <= 0){ clearInterval(state.timerId); finishRun(); }
+      render();
+    }, isCorrect ? 1500 : 2600);
+  }
+
+  function finishRun(){
+    state.screen = "results";
+    pushPlayerProgress();
+    var accuracy = state.attempted ? Math.round((state.correct/state.attempted)*100) : 0;
+    Engine.players.saveRun({
+      code: state.gameCode, round: state.joinedRound,
+      studentId: Engine.identity.studentId, displayName: Engine.identity.displayName, period: Engine.identity.period,
+      score: state.score, correct: state.correct, attempted: state.attempted, accuracy: accuracy, bestStreak: state.bestStreak
+    });
+  }
+
+  function pushPlayerProgress(){
+    if (!state.game || !state.gameCode) return;
+    Engine.players.pushProgress({
+      code: state.gameCode, round: state.game.round,
+      studentId: Engine.identity.studentId, displayName: Engine.identity.displayName, period: Engine.identity.period,
+      score: state.score, streak: state.streak, bestStreak: state.bestStreak, correct: state.correct, attempted: state.attempted
+    });
+  }
+
+  /* ---------------------------------------------------------------
+     RESULTS
+  ----------------------------------------------------------------*/
+  function viewResults(){
+    var accuracy = state.attempted ? Math.round((state.correct/state.attempted)*100) : 0;
+    var missEntries = Object.keys(state.misses).sort(function(a,b){ return state.misses[b]-state.misses[a]; });
+    var corrRows = missEntries.length ? missEntries.map(function(k){
+      return '<div class="corr-row"><span>'+esc(CATS[k].label)+'</span><span class="mono">&times;'+state.misses[k]+'</span></div>';
+    }).join("") : '<div class="corr-row"><span>No misses filed &mdash; clean shift.</span><span></span></div>';
+    return '' + masthead("Final Edition") +
+      '<div class="card">' +
+        '<div class="score-hero"><div class="score-cap">'+esc(Engine.identity.displayName)+' &middot; Period '+esc(Engine.identity.period)+'</div>' +
+          '<div class="score-num mono">'+state.score+'</div><div class="score-cap">Points Filed</div></div>' +
+        '<div class="stat-row">' +
+          '<div class="stat-tile"><span class="n">'+accuracy+'%</span><span class="l">Accuracy</span></div>' +
+          '<div class="stat-tile"><span class="n">'+state.correct+'/'+state.attempted+'</span><span class="l">Calls Made</span></div>' +
+          '<div class="stat-tile"><span class="n">'+state.bestStreak+'</span><span class="l">Best Streak</span></div>' +
+        '</div>' +
+        '<div class="corrections"><p class="eyebrow">Corrections &mdash; missed most often</p>'+corrRows+'</div>' +
+        '<div class="btn-row">' +
+          '<button class="btn btn-ghost" id="againBtn">Back to the Lobby</button>' +
+          '<button class="btn btn-flag" id="lbBtn">View the Wire</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  /* ---------------------------------------------------------------
+     LEADERBOARD (all-time, this game only)
+  ----------------------------------------------------------------*/
+  function refreshLeaderboard(){
+    Engine.leaderboard.get(100).then(function(rows){
+      state.lbCache = rows || []; state.lbLoaded = true;
+      if (state.screen === "leaderboard" || state.screen === "register") render();
+    }).catch(function(){ state.lbLoaded = true; });
+  }
+
+  function viewLeaderboard(){
+    var body;
+    if (!state.lbLoaded) body = '<div class="lb-empty">Loading the wire&hellip;</div>';
+    else if (!state.lbCache.length) body = '<div class="lb-empty">No shifts filed yet. Be the first byline.</div>';
+    else body = '<div style="overflow-x:auto;"><table class="lb"><thead><tr><th>#</th><th>Name</th><th>Period</th><th class="num">Score</th><th class="num">Acc.</th></tr></thead><tbody>' +
+      state.lbCache.map(function(r,i){
+        var badgeCls = "rank-badge"+(i<3?" top":"");
+        return '<tr><td><span class="'+badgeCls+'">'+(i+1)+'</span></td><td>'+esc(r.displayName)+'</td>' +
+          '<td class="mono" style="color:var(--ink-soft); font-size:12px;">'+esc(r.period||"&mdash;")+'</td>' +
+          '<td class="num">'+r.score+'</td><td class="num">'+(r.accuracy!=null?r.accuracy+'%':'&mdash;')+'</td></tr>';
+      }).join("") + '</tbody></table></div>';
+    return '' + '<button class="backlink" id="backBtn">&larr; Back</button>' + masthead("The Wire") +
+      '<div class="card"><div class="lb-head"><div><p class="eyebrow" style="margin:0;">All-Time Newsroom Board</p><h2 class="section-title" style="margin:0;">Leaderboard</h2></div></div>' +
+      body + '</div>';
+  }
+
+  /* ---------------------------------------------------------------
+     EVENT BINDING
+  ----------------------------------------------------------------*/
+  function bind(){
+    var el;
+    if ((el = document.getElementById("codeInput"))){
+      el.addEventListener("input", function(){
+        var pos = this.selectionStart; this.value = this.value.toUpperCase();
+        try { this.setSelectionRange(pos,pos); } catch(e){}
+      });
+    }
+    if ((el = document.getElementById("startBtn"))){
+      el.addEventListener("click", function(){
+        var btn = this;
+        var code = document.getElementById("codeInput").value.toUpperCase().replace(/[^A-Z0-9]/g,"");
+        var id = document.getElementById("idInput").value.trim();
+        var errEl = document.getElementById("regErr");
+        if (!code){ errEl.textContent = "Enter the game code your teacher projected."; return; }
+        if (!id){ errEl.textContent = "Enter your student ID."; return; }
+        errEl.textContent = "Checking…"; btn.disabled = true;
+        Promise.all([Engine.session.checkCode(code), Engine.identity.lookup(id)]).then(function(res){
+          btn.disabled = false;
+          var codeOk = res[0]; var idRes = res[1];
+          if (!codeOk){ errEl.textContent = "We couldn't find that game code. Double-check with your teacher."; return; }
+          if (!idRes || !idRes.found){ errEl.textContent = "That student ID isn't on the roster. Double-check the number."; return; }
+          errEl.textContent = "";
+          state.gameCode = code; state.joinError = "";
+          lsSet("skewfeed_code", code);
+          startGamePolling(code);
+          state.screen = "briefing";
+          render();
+        }).catch(function(){
+          btn.disabled = false;
+          errEl.textContent = "Couldn't reach the game board — try again.";
+        });
+      });
+      document.getElementById("idInput").addEventListener("keydown", function(e){ if (e.key==="Enter") document.getElementById("startBtn").click(); });
+    }
+    if ((el = document.getElementById("toLbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; render(); });
+    if ((el = document.getElementById("goBtn"))) el.addEventListener("click", function(){ state.screen="lobby"; state.lastPhase="__force__"; render(); });
+    if ((el = document.getElementById("verdictGrid"))) el.addEventListener("click", function(e){ var btn=e.target.closest(".verdict-btn"); if(btn) handleAnswer(btn.getAttribute("data-cat")); });
+    if ((el = document.getElementById("againBtn"))) el.addEventListener("click", function(){ state.screen="lobby"; state.lastPhase="__force__"; render(); });
+    if ((el = document.getElementById("lbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; render(); });
+    if ((el = document.getElementById("backBtn"))) el.addEventListener("click", function(){ state.screen = state.gameCode ? "lobby" : "register"; render(); });
+  }
+
+  /* ---------------------------------------------------------------
+     GAME POLLING (replaces the old db onSnapshot)
+  ----------------------------------------------------------------*/
+  function startGamePolling(code){
+    Engine.session.startPolling(code, 1000, function(game){
+      state.game = game;
+      if (!game && (state.screen==="lobby" || state.screen==="briefing")){
+        state.gameCode = ""; lsSet("skewfeed_code","");
+        state.joinError = "That game code isn't active anymore — ask your teacher for the current code.";
+        state.screen = "register"; render();
+        return;
+      }
+      var phase = Engine.session.derivePhase(game);
+      if (state.screen === "briefing"){
+        if (phase === "countdown" || phase === "live"){ state.screen = "lobby"; state.lastPhase = "__force__"; render(); }
+      } else if (state.screen === "lobby"){
+        if (phase !== state.lastPhase){
+          state.lastPhase = phase;
+          if (phase === "live"){ beginLocalRound(); return; }
+          render();
+        } else if (phase === "countdown"){
+          Engine.ui.updateMaskNum(game);
+        }
+      } else {
+        state.lastPhase = phase;
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------
+     BOOT
+  ----------------------------------------------------------------*/
+  if (Engine.identity.isLoggedIn() && state.gameCode){
+    state.screen = "lobby";
+    startGamePolling(state.gameCode);
+  }
+  refreshLeaderboard();
+  setInterval(refreshLeaderboard, 15000);
+  render();
+})();
+</script>
+</body>
+</html>
