@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Classroom Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#E7EBE2; --card:#F8FAF4; --ink:#1B1F1A; --ink-soft:#565F53; --rule:#C7CFBE; --flag:#D8433E; }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){ --paper:#14171A; --card:#1D2120; --ink:#ECEFE8; --ink-soft:#A2AA9C; --rule:#3A413B; --flag:#E8615C; }
+  }
+  :root[data-theme="dark"]{ --paper:#14171A; --card:#1D2120; --ink:#ECEFE8; --ink-soft:#A2AA9C; --rule:#3A413B; --flag:#E8615C; }
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body{ background:radial-gradient(circle at 1px 1px, var(--rule) 1px, transparent 0) 0 0/16px 16px, var(--paper);
+    color:var(--ink); font-family:"IBM Plex Sans",-apple-system,system-ui,sans-serif; min-height:100vh; }
+  .wrap{max-width:640px; margin:0 auto; padding:48px 18px;}
+  h1{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(32px,7vw,48px); text-transform:uppercase; margin:0 0 8px;}
+  h1 em{font-style:normal; color:var(--flag);}
+  p.sub{color:var(--ink-soft); margin:0 0 28px;}
+  .game-card{ display:block; background:var(--card); border:1px solid var(--rule); border-radius:8px; padding:18px 20px; margin-bottom:14px; text-decoration:none; color:var(--ink); }
+  .game-card b{display:block; font-size:17px; margin-bottom:3px;}
+  .game-card span{font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--ink-soft);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Classroom <em>Games</em></h1>
+  <p class="sub">Pick a game below.</p>
+  <a class="game-card" href="skew-the-feed/">
+    <b>Skew the Feed</b>
+    <span>AP Statistics · Unit 1 · Sampling &amp; response bias</span>
+  </a>
+</div>
+</body>
+</html>
