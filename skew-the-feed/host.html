@@ -158,7 +158,7 @@
   var TALLY_POLL_MS = 1200;
 
   var state = {
-    hostCode: "", hostChecked: false, hostCreating: false, hostCreateError: "",
+    hostCode: "", lastHostCode: "", hostChecked: false, hostCreating: false, hostCreateError: "",
     hostRejoining: false, hostRejoinError: "", hostMisses: 0,
     game: null, hostDurationMinutes: DEFAULT_MINUTES,
     playersShown: [],
@@ -173,6 +173,7 @@
   function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
   state.hostCode = lsGet("skewfeed_host_code");
+  state.lastHostCode = lsGet("skewfeed_last_host_code");
 
   function masthead(kicker){
     return '<div class="masthead"><div class="kicker">'+esc(kicker||"AP STATISTICS · UNIT 1 FIELD EXERCISE")+'</div>' +
@@ -435,16 +436,15 @@
   function hostCreateGame(){
     if (state.hostCreating) return;
     state.hostCreating = true; state.hostCreateError = ""; render();
-    // state.hostCode is "" on the very first code of a session (nothing to
-    // retire) and holds the current code when this runs via "Start a
-    // different game" — passing it tells the backend to retire that old
-    // code in the same write, so students on it get kicked back to
-    // register within a poll cycle instead of waiting on it forever.
-    Engine.session.createGame(state.hostCode || undefined).then(function(code){
-      state.hostCreating = false; state.hostCode = code; state.hostChecked = false;
+    // Teardown clears the active code but keeps lastHostCode, so a new
+    // code still retires the abandoned room and releases its students.
+    var retireCode = state.hostCode || state.lastHostCode || undefined;
+    Engine.session.createGame(retireCode).then(function(code){
+      state.hostCreating = false; state.hostCode = code; state.lastHostCode = code; state.hostChecked = false;
       state.hostMisses = 0;
       state.hostDurationMinutes = DEFAULT_MINUTES;
       lsSet("skewfeed_host_code", code);
+      lsSet("skewfeed_last_host_code", code);
       startPolling(code);
       render();
     }).catch(function(){
@@ -483,9 +483,10 @@
         render();
         return;
       }
-      state.hostCode = code; state.hostChecked = false; state.hostMisses = 0;
+      state.hostCode = code; state.lastHostCode = code; state.hostChecked = false; state.hostMisses = 0;
       state.game = null; state.screen = "dashboard"; lastRound = null;
       lsSet("skewfeed_host_code", code);
+      lsSet("skewfeed_last_host_code", code);
       startPolling(code);
       render();
     }).catch(function(){
