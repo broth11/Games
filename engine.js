@@ -27,13 +27,14 @@
 (function (global) {
   "use strict";
 
-  var CONFIG = { appsScriptUrl: "", gameType: "" };
+  var CONFIG = { appsScriptUrl: "", gameType: "", music: null };
   var COUNTDOWN_MS = 5000;
   var CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L
 
   function configure(opts) {
     CONFIG.appsScriptUrl = opts.appsScriptUrl;
     CONFIG.gameType = opts.gameType;
+    CONFIG.music = opts.music || null; // optional, host pages only: {idle, countdown, live, ended}
   }
 
   function generateCode() {
@@ -313,6 +314,93 @@
   }
 
   /* ---------------------------------------------------------------
+     AUDIO — host-only background music, keyed to the round phase.
+
+     FOR HOST PAGES ONLY. Nothing is constructed or fetched until the
+     first playFor() call, so a student page that never calls it
+     downloads zero bytes of audio even though this code ships in the
+     shared engine. Do NOT wire this into a student index.html — 30
+     phones looping the same track slightly out of sync is genuinely
+     unpleasant in a room.
+
+     Config is per game, in that game's Engine.configure(...):
+       music: { idle, countdown, live, ended }
+     Keys MUST match what derivePhase() returns. Any phase omitted is
+     deliberate silence; no `music` key at all means a silent game.
+
+     Phase changes cross-fade, so a round ending fades out rather than
+     sounding like a crash.
+  ----------------------------------------------------------------*/
+  var FADE_MS = 450;
+  var MUSIC_VOLUME = 0.35;   // low by default — the host talks over this
+  var audioEls = {};         // phase -> HTMLAudioElement, built on demand
+  var audioPhase = null;
+  var audioMuted = (lsGet("audioMuted") === "1");
+
+  function getAudioEl(phase) {
+    if (audioEls[phase]) return audioEls[phase];
+    var src = CONFIG.music && CONFIG.music[phase];
+    if (!src) return null;
+    var a = new Audio(src);
+    a.loop = true;
+    a.preload = "auto";
+    a.volume = 0;
+    audioEls[phase] = a;
+    return a;
+  }
+
+  function fadeTo(a, target, ms) {
+    if (!a) return;
+    if (a._fadeTimer) clearInterval(a._fadeTimer);
+    var from = a.volume, start = Date.now();
+    a._fadeTimer = setInterval(function () {
+      var t = Math.min(1, (Date.now() - start) / ms);
+      a.volume = Math.max(0, Math.min(1, from + (target - from) * t));
+      if (t >= 1) {
+        clearInterval(a._fadeTimer); a._fadeTimer = null;
+        if (target === 0) { a.pause(); a.currentTime = 0; }
+      }
+    }, 30);
+  }
+
+  function startPhaseTrack(phase) {
+    var el = getAudioEl(phase);
+    if (!el) return;
+    el.volume = 0;
+    // Rejects if no user gesture has happened yet. On a host page the
+    // teacher has always clicked something first, so this is a non-event.
+    var p = el.play();
+    if (p && p.catch) p.catch(function () {});
+    fadeTo(el, MUSIC_VOLUME, FADE_MS);
+  }
+
+  // Safe to call on every tick — a repeat of the current phase is a no-op.
+  function playFor(phase) {
+    if (phase === audioPhase) return;
+    var outgoing = audioPhase ? audioEls[audioPhase] : null;
+    audioPhase = phase;
+    if (outgoing) fadeTo(outgoing, 0, FADE_MS);
+    if (audioMuted) return;
+    startPhaseTrack(phase);
+  }
+
+  function stopAudio() {
+    Object.keys(audioEls).forEach(function (p) { fadeTo(audioEls[p], 0, FADE_MS); });
+    audioPhase = null;
+  }
+
+  // Persists across reloads — a machine muted last period stays muted
+  // rather than surprising the room on refresh.
+  function setMuted(v) {
+    audioMuted = !!v;
+    lsSet("audioMuted", audioMuted ? "1" : "0");
+    if (audioMuted) Object.keys(audioEls).forEach(function (p) { fadeTo(audioEls[p], 0, FADE_MS); });
+    else if (audioPhase) startPhaseTrack(audioPhase);
+  }
+
+  function isMuted() { return audioMuted; }
+
+  /* ---------------------------------------------------------------
      UI HELPERS
   ----------------------------------------------------------------*/
   // `countdownEnd` here is the device's OWN local countdown end, not
@@ -380,6 +468,7 @@
       getPlayers: getPlayers
     },
     leaderboard: { get: getLeaderboard },
+    audio: { playFor: playFor, stop: stopAudio, setMuted: setMuted, isMuted: isMuted },
     ui: { maskHtml: maskHtml, setMaskNum: setMaskNum, scoreboardTableHtml: scoreboardTableHtml }
   };
 })(window);

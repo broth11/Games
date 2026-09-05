@@ -20,6 +20,12 @@ This trades some things away compared to a "real" realtime backend (Firebase/Sup
 ```
 /engine.js                  ← shared engine, used by every game, never game-specific
 /index.html                 ← landing page listing all games
+/audio/
+    skew-the-feed/           ← this game's music tracks (host-only)
+        lobby.mp3
+        countdown.mp3
+        newsroom.mp3
+    some-other-game/         ← one subfolder per gameType
 /skew-the-feed/
     index.html               ← student-facing page for this game
     host.html                ← teacher/host dashboard for this game
@@ -30,6 +36,7 @@ This trades some things away compared to a "real" realtime backend (Firebase/Sup
 
 Rules that keep this working:
 - `engine.js` always stays at the repo root.
+- `/audio/` also stays at the repo root, one subfolder per `gameType`. A game's `host.html` references it as `../audio/<game-type>/...` — the same `../` rule as the engine script tag, since `host.html` sits one folder below the root. Getting this wrong is quieter than the `engine.js` version of the mistake: the page still works, you just get silence and a 404 in the console.
 - Every game lives in its own folder at the root, alongside `engine.js`.
 - A game's `index.html`/`host.html` load the engine with `<script src="../engine.js"></script>` — the `../` matters because the game files sit one folder *below* `engine.js`. If a game's HTML is ever placed directly at the repo root instead of in its own folder, that path must become `<script src="engine.js"></script>` (no `../`) or the script fails to load silently and the whole page's JavaScript dies (this exact bug came up twice during setup — see Troubleshooting).
 - The root `index.html` is a simple static menu page linking to each game's folder (e.g. `skew-the-feed/`). It's just a landing page, not part of any game's logic.
@@ -99,7 +106,12 @@ A game's HTML includes it (`<script src="../engine.js"></script>`) and configure
 ```js
 Engine.configure({
   appsScriptUrl: "https://script.google.com/macros/s/XXXXX/exec",
-  gameType: "skew-the-feed"   // unique per game — keeps each game's scores/history separate
+  gameType: "skew-the-feed",  // unique per game — keeps each game's scores/history separate
+  music: {                    // optional, host pages only — see Engine.audio below
+    idle:      "../audio/skew-the-feed/lobby.mp3",
+    countdown: "../audio/skew-the-feed/countdown.mp3",
+    live:      "../audio/skew-the-feed/newsroom.mp3"
+  }
 });
 ```
 
@@ -110,6 +122,7 @@ What's available after that:
 - **`Engine.players`** — `pushProgress(fields)` upserts a live `Players` row; `saveRun(payload)` appends a permanent `Runs` row; `getPlayers(code, round)` reads the live scoreboard.
 - **`Engine.leaderboard.get(opts)`** — reads `Runs`. `opts` can be a plain number (legacy: just a limit), or `{limit, code, round}`.
 - **`Engine.round`** — the student-side local clock (added September 2026, see the timing model below). `plan(game)` takes the game row a poll just handed us and decides how *this* device should run the round, returning `{round, countdownEnd, playEnd, late, secondsAvailable}` or `null` if there's nothing to join. `runCountdown(countdownEnd, onTick, onDone)` runs a purely local countdown with no network in the loop and returns a handle with `.cancel()`.
+- **`Engine.audio`** — **host-only** background music keyed to the round phase. `playFor(phase)` cross-fades (450ms) from whatever is playing to that phase's track; calling it with the phase already playing is a no-op, so it's safe to call every tick — `host.html` drives it straight from the local 250ms clock loop, which is already the single authority on phase. `stop()` fades everything out; `setMuted(bool)`/`isMuted()` back the mute toggle, and the mute state persists in `localStorage` so a machine muted last period stays muted after a reload. The `music` config maps phase names — `idle` (the between-rounds lobby), `countdown`, `live`, `ended` — to paths; **keys must match what `derivePhase()` returns**, and any phase omitted is deliberate silence. A game with no `music` key is simply silent, nothing else to change. Nothing is constructed or fetched until the first `playFor()` call, so student pages that never call it download zero bytes of audio despite this code shipping in the shared engine. **Do not wire `playFor()` into a student `index.html`** — 30 phones looping the same track slightly out of sync is genuinely unpleasant in a room.
 - **`Engine.ui`** — small rendering helpers: `maskHtml(countdownEnd, kicker, sub)` for the countdown overlay (note: takes the device's own local countdown end, **not** a game object), `setMaskNum(n)` to tick its number with a restarted CSS pop animation, `scoreboardTableHtml(rows, columns)` for a generic ranked table.
 
 A new game's own HTML owns everything about *what the game actually is* — content, scoring rules, the play screen — and just calls into `Engine` for identity and sync.
@@ -130,6 +143,7 @@ A new game's own HTML owns everything about *what the game actually is* — cont
 1. Make a new folder at the repo root, e.g. `/new-game-name/`.
 2. Copy `skew-the-feed/index.html` and `host.html` as a starting template.
 3. Change `gameType` in both files' `Engine.configure(...)` call to something unique (e.g. `"new-game-name"`) — this is what keeps its scores and history separate from every other game sharing the same Sheet.
+3b. If the game wants music, create `/audio/<new-game-name>/` at the repo root, drop the tracks in, and point `host.html`'s `music` config at them with `../audio/<new-game-name>/...`. Omit the `music` key entirely for a silent game. Leave `index.html` alone — audio is host-only.
 4. Replace the content bank, scoring rules, and play-screen UI with the new game's actual content. Everything about identity, game codes, the countdown, and score syncing keeps working unchanged because it's coming from `engine.js`.
 5. Add a card for it on the root `index.html` landing page.
 6. No changes needed to `Code.gs` or the Sheet's tab structure — a new `gameType` value is all that's needed to keep it separate; rows for different games simply coexist in the same `Games`/`Players`/`Runs` tabs.
@@ -154,6 +168,8 @@ Clean JSON back means the backend itself is healthy and any remaining problem is
 
 **Why POST bodies are sent as `Content-Type: text/plain`, not `application/json`.** Apps Script web apps have no CORS preflight handler. A `fetch` POST with an `application/json` content-type triggers a browser preflight (`OPTIONS`) request that Apps Script can't answer, and the real request never goes through. Sending as `text/plain` keeps it a CORS "simple request" that skips preflight entirely — Apps Script doesn't care about the declared content-type, it just reads and `JSON.parse`s the raw body either way.
 
+**Music doesn't play on the host machine.** In likelihood order: (1) the mute toggle is on — it persists across reloads by design, check the button beside the phase pill; (2) a wrong path — look for a 404 in the console and re-read §2's `../audio/...` rule; (3) the `music` config uses a key that isn't a real phase name (must be `idle`, `countdown`, `live`, or `ended`) — anything else is silently ignored; (4) autoplay blocked because no user gesture had happened yet, which shouldn't occur normally since the host always clicks Generate Code or Start Round first, but can happen when testing straight into a live round from a saved code. Clicking anything on the page clears it.
+
 **A slow or out-of-order poll response briefly shows stale data.** `engine.js`'s polling guards against this with a rising sequence number — a response is only applied if no newer request has already completed. If this ever regresses, that's the mechanism to look at (`pollSeq` in `engine.js`).
 
 ## 9. Known limits, worth remembering
@@ -162,6 +178,7 @@ Clean JSON back means the backend itself is healthy and any remaining problem is
 - **Apps Script latency.** Each request typically takes 1-2.5 seconds round-trip, sometimes longer on a cold start after inactivity. Fine for a classroom's pace of use, but not instant.
 - **Apps Script has a real concurrency ceiling.** A full class (25-35 devices) all polling the same single Apps Script deployment adds up fast, especially with everyone opening the link at the same moment at the start of class. Under that load, round-trip time can spike well past the normal 1-2.5s, or a request can hang outright. Two symptoms traced back to this in September 2026: `host.html` sitting on "Loading…" for a long time on open, and a started round not actually reaching students (the host's own screen showed it as started from the optimistic local update, but the write that makes it real for everyone else silently failed and nothing said so). `engine.js`'s resilience changes (below) reduce how often this bites and make it visible when it does, but the underlying ceiling is still there.
 - **Sheet size over time.** Everything (roster, live game state, all-time history) lives in one Sheet. If `Runs` grows very large over a school year, consider periodically archiving old rows into a second tab — no code changes needed to do this.
+- **Audio is host-only, on purpose.** Student devices never play music, so there's no sync problem and no bandwidth cost on 30 phones. If a future game wants student-side sound, it should be short one-shots tied to the student's own actions (a correct/wrong chime), never a shared loop.
 - **Never displayed on shared screens:** raw student ID numbers. Only `display_name` should ever appear on a projected view.
 - **Stale cached codes.** `skew-the-feed/index.html` caches its game code in `localStorage` with a timestamp and only auto-resumes into the lobby if it's under 4 hours old; older than that, or explicit `retired: true` from the backend (host clicked "Start a different game"), bounces the student back to registration instead of leaving them polling a code that will never start. A "Switch game code" link on the briefing/lobby screens covers the gap in between (e.g. two periods getting fresh codes within the same few hours).
 

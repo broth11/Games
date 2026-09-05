@@ -67,6 +67,9 @@
   .phase-pill.countdown{background:var(--flag-ink); color:var(--flag); border-color:var(--flag);}
   .phase-pill.ended{background:var(--card-2); color:var(--ink-soft);}
   .host-top{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+  .host-top-right{display:flex; align-items:center; gap:8px;}
+  .mute-btn{display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:20px; border:1px solid var(--rule); background:var(--card-2); color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; font-size:11px; text-transform:uppercase; letter-spacing:.07em; cursor:pointer;}
+  .mute-btn.muted{border-color:var(--flag); color:var(--flag); background:var(--flag-ink);}
   .big-clock{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:56px; text-align:center; letter-spacing:.02em; margin:10px 0 2px;}
   .preset-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
   .preset-chip{padding:7px 14px; border-radius:20px; border:1.5px solid var(--rule); background:var(--card-2); color:var(--ink); font-family:"IBM Plex Mono",monospace; font-size:12.5px; cursor:pointer;}
@@ -122,8 +125,23 @@
 
   Engine.configure({
     appsScriptUrl: "https://script.google.com/macros/s/AKfycbwdGJAOLH5JskqJTckVxZuOGcu-nBAEj0DXe5M2tKcWHby4ZfVRM_1-IL11WA_g0iIr7Q/exec",
-    gameType: "skew-the-feed"
+    gameType: "skew-the-feed",
+    // Host-only music. Keys must match derivePhase(): idle | countdown |
+    // live | ended. "idle" is the between-rounds lobby. "ended" is left
+    // out on purpose so the results podium is read in quiet. The "../"
+    // matters — this file sits one folder below the repo root.
+    music: {
+      idle:      "../audio/skew-the-feed/lobby.mp3",
+      countdown: "../audio/skew-the-feed/countdown.mp3",
+      live:      "../audio/skew-the-feed/newsroom.mp3"
+    }
   });
+
+  function muteBtnHtml(){
+    var m = Engine.audio.isMuted();
+    return '<button class="mute-btn'+(m?" muted":"")+'" id="muteBtn" title="Toggle background music">' +
+      (m ? "&#128263; Muted" : "&#128266; Sound") + '</button>';
+  }
 
   var DEFAULT_MINUTES = 5;
   var SCORE_REFRESH_MS = 15000;
@@ -215,7 +233,8 @@
       '</div>' +
       '<div class="card" style="margin-top:16px;">' +
         '<div class="host-top"><div><p class="eyebrow" style="margin:0;">Front of Room</p><h2 class="section-title" style="margin:0;">Run the shift</h2></div>' +
-          '<span class="phase-pill '+phase+'" id="hostPhasePill">'+phaseLabel(phase)+'</span></div>' +
+          '<div class="host-top-right">' + muteBtnHtml() +
+            '<span class="phase-pill '+phase+'" id="hostPhasePill">'+phaseLabel(phase)+'</span></div></div>' +
         '<div class="big-clock mono" id="hostClockNum">'+clockText(game, phase)+'</div>' +
         '<div id="hostDurationBlock" style="display:'+(running?"none":"block")+';">' +
           '<label for="hostMinutes">Round length (minutes)</label>' +
@@ -490,6 +509,7 @@
   setInterval(function(){
     if (state.screen !== "dashboard" || !state.hostChecked || !state.game) return;
     var phase = Engine.session.derivePhase(state.game);
+    Engine.audio.playFor(phase);   // no-op unless the phase actually changed
     if (phase !== lastLocalPhase){
       lastLocalPhase = phase;
       render();   // phase pill, buttons and "Show Round Results" all flip together
@@ -504,6 +524,7 @@
       state.game = game; state.hostChecked = true;
       if (!game){
         state.hostCode = ""; lsSet("skewfeed_host_code","");
+        Engine.audio.stop();
         render();
         return;
       }
@@ -522,6 +543,11 @@
 
   function bind(){
     var el;
+    if ((el = document.getElementById("muteBtn"))) el.addEventListener("click", function(){
+      Engine.audio.setMuted(!Engine.audio.isMuted());
+      this.className = "mute-btn" + (Engine.audio.isMuted() ? " muted" : "");
+      this.innerHTML = Engine.audio.isMuted() ? "&#128263; Muted" : "&#128266; Sound";
+    });
     if ((el = document.getElementById("hostCreateBtn"))) el.addEventListener("click", hostCreateGame);
     if ((el = document.getElementById("hostStartBtn"))) el.addEventListener("click", hostStartRound);
     if ((el = document.getElementById("hostEndBtn"))) el.addEventListener("click", hostEndRound);
