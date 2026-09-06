@@ -135,6 +135,24 @@
   .verdict-btn[data-cat="unitsInterpretation"] .vbar{background:var(--units);}
   .verdict-btn[data-cat="clean"] .vbar{background:var(--wire);}
   .verdict-btn:disabled{opacity:.5; cursor:default;} .verdict-btn.clean-btn{grid-column:1 / -1;}
+
+  /* ---- PLAY SCREEN STRUCTURE ---- */
+  .play-layout{display:grid; grid-template-columns:minmax(0,1fr); gap:16px; align-items:start;}
+  .play-pane{min-width:0;}
+  .play-pane-classify .card{margin-top:0;}
+  .step-list{min-width:0;}
+  .work-card--dense .work-body{font-size:16px; line-height:1.32;}
+  .work-card--dense .step-choice{margin:5px 0; padding:8px 10px;}
+  .work-card--dense .answer-icon{font-size:16px;}
+  .work-card--dense .math-step{overflow-x:auto;}
+  @media (max-width:560px){
+    .work-card--dense .step-list{max-height:52vh; overflow-y:auto; overscroll-behavior:contain; padding-right:2px;}
+  }
+  @media (min-width:900px){
+    .wrap:has(.play-layout){max-width:1180px;}
+    .play-layout.has-classify{grid-template-columns:minmax(0,1.35fr) minmax(340px,.95fr); gap:18px;}
+  }
+
   .score-hero{text-align:center; padding:8px 0 4px;}
   .score-num{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:88px; line-height:.9; color:var(--flag);}
   .score-cap{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft);}
@@ -541,13 +559,15 @@
       '</div>' +
       '<div class="timerbar"><div class="timerfill" id="timerFill" style="width:'+pct+'%; background:'+barColor+';"></div></div>' +
       lateNote +
-      '<div class="work-card">' +
+      '<div class="play-layout'+(state.stage === "classify" ? ' has-classify' : '')+'">' +
+      '<div class="play-pane play-pane-work"><div class="work-card'+(card.steps.length > 5 ? ' work-card--dense' : '')+'">' +
         '<div class="work-head"><div class="work-who"><div class="work-title">Worked derivative</div><div class="work-meta">'+esc(card.tier)+' tier</div></div></div>' +
-        '<div class="work-body"><p><b>Stage 1: Locate the error.</b> Tap the first incorrect step, or choose Clean.</p><div id="stepList">'+steps+'</div>' +
+        '<div class="work-body"><p><b>Stage 1: Locate the error.</b> Tap the first incorrect step, or choose Clean.</p><div id="stepList" class="step-list">'+steps+'</div>' +
           '<button class="btn btn-ghost" id="cleanChoice" '+(state.answering || state.stage !== "locate"?"disabled":"")+'>Clean — No Error'+iconHtml(state.icons.clean)+'</button>' +
           '<button class="btn btn-ghost skip-control" id="skipLocateBtn" '+(state.answering || state.stage !== "locate"?"disabled":"")+'>Skip this item</button></div>' +
+      '</div></div>' +
+      (state.stage === "classify" ? '<div class="play-pane play-pane-classify"><div class="card"><p class="eyebrow">Stage 2</p><h2 class="section-title">Classify the slip</h2><div class="verdicts" id="verdictGrid">'+btns+'</div><button class="btn btn-ghost skip-control" id="skipCategoryBtn" '+(state.answering?"disabled":"")+'>Skip this item</button></div></div>' : '') +
       '</div>' +
-      (state.stage === "classify" ? '<div class="card" style="margin-top:16px;"><p class="eyebrow">Stage 2</p><h2 class="section-title">Classify the slip</h2><div class="verdicts" id="verdictGrid">'+btns+'</div><button class="btn btn-ghost skip-control" id="skipCategoryBtn" '+(state.answering?"disabled":"")+'>Skip this item</button></div>' : '') +
       (state.feedback ? '<div class="explain show"><b>'+esc(state.feedback.title)+'.</b> '+esc(state.feedback.detail)+'<br>'+card.explanation+'</div>' : '');
   }
 
