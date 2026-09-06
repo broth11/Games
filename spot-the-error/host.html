@@ -91,6 +91,7 @@
   @keyframes riseIn{ from{opacity:0; transform:translateY(26px);} to{opacity:1; transform:translateY(0);} }
   .podium-slot .p-name{font-weight:700; font-size:0.875rem; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .podium-slot .p-score{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:0.9375rem; color:#E8615C;}
+  .podium-slot .p-summary{font-family:"IBM Plex Mono",monospace; font-size:0.6875rem; opacity:.7; white-space:nowrap;}
   .podium-bar{width:100%; border-radius:6px 6px 0 0; display:flex; align-items:flex-start; justify-content:center; padding-top:8px; font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:1.625rem;}
   .podium-slot.rank-1 .podium-bar{height:120px; background:#E8615C; color:#241110;}
   .podium-slot.rank-2 .podium-bar{height:90px; background:#8A9A93; color:#12100E;}
@@ -99,6 +100,7 @@
   .results-row{display:flex; justify-content:space-between; padding:7px 4px; border-bottom:1px solid rgba(246,241,228,0.15); font-size:0.875rem;}
   .results-row .r-rank{font-family:"IBM Plex Mono",monospace; opacity:.55; width:26px; flex:none;}
   .results-row .r-score{font-family:"IBM Plex Mono",monospace; font-weight:600;}
+  .results-row .r-summary{font-family:"IBM Plex Mono",monospace; font-size:0.6875rem; opacity:.7; margin-left:auto; padding:0 12px; white-space:nowrap;}
   .results-empty{opacity:.6; padding:20px 0; font-family:"IBM Plex Mono",monospace; font-size:0.8125rem;}
 
   /* ---- TABULATING ---- */
@@ -209,12 +211,22 @@
     return "Done";
   }
 
+  function scoreSummary(row){
+    return (row.correct != null && row.attempted != null) ? row.correct+"/"+row.attempted : "—";
+  }
+
   function scoreTableHtml(){
-    return Engine.ui.scoreboardTableHtml(state.playersShown, [
+    var rows = state.playersShown.map(function(row){
+      var shown = Object.assign({}, row);
+      shown.correctAttempted = scoreSummary(row);
+      return shown;
+    });
+    return Engine.ui.scoreboardTableHtml(rows, [
       {key:"displayName", label:"Name"},
       {key:"period", label:"Period"},
-      {key:"score", label:"Score", numeric:true},
-      {key:"streak", label:"Streak", numeric:true}
+      {key:"score", label:"Points", numeric:true},
+      {key:"bestStreak", label:"Best", numeric:true},
+      {key:"correctAttempted", label:"Correct", numeric:true}
     ]);
   }
 
@@ -352,11 +364,11 @@
         var r = top3[i];
         if (!r) return "";
         var rank = i + 1;
-        return '<div class="podium-slot rank-'+rank+'"><div class="p-name">'+esc(r.displayName)+'</div><div class="p-score">'+r.score+'</div>' +
+        return '<div class="podium-slot rank-'+rank+'"><div class="p-name">'+esc(r.displayName)+'</div><div class="p-score">'+r.score+' pts</div><div class="p-summary">Best '+(r.bestStreak==null?'—':r.bestStreak)+' · '+scoreSummary(r)+'</div>' +
           '<div class="podium-bar">'+rank+'</div></div>';
       }).join("") + '</div>' : '';
       var restHtml = rest.length ? '<div class="results-rest">' + rest.map(function(r,i){
-        return '<div class="results-row"><span class="r-rank">'+(i+4)+'</span><span>'+esc(r.displayName)+'</span><span class="r-score">'+r.score+'</span></div>';
+        return '<div class="results-row"><span class="r-rank">'+(i+4)+'</span><span>'+esc(r.displayName)+'</span><span class="r-summary">Best '+(r.bestStreak==null?'—':r.bestStreak)+' · '+scoreSummary(r)+'</span><span class="r-score">'+r.score+' pts</span></div>';
       }).join("") + '</div>' : '';
       body = !rows.length ? '<div class="results-empty">No scores reported for this round.</div>' : podium + restHtml;
     }
@@ -406,13 +418,13 @@
     var body;
     if (state.historyLoading) body = '<div class="lb-empty">Loading&hellip;</div>';
     else if (!state.historyRows.length) body = '<div class="lb-empty">No results in this view yet.</div>';
-    else body = '<div style="overflow-x:auto;"><table class="lb"><thead><tr><th>#</th><th>Name</th><th>Period</th><th>Code</th><th class="num">Round</th><th class="num">Score</th><th class="num">Acc.</th></tr></thead><tbody>' +
+    else body = '<div style="overflow-x:auto;"><table class="lb"><thead><tr><th>#</th><th>Name</th><th>Period</th><th>Code</th><th class="num">Round</th><th class="num">Points</th><th class="num">Best</th><th class="num">Correct</th><th class="num">Acc.</th></tr></thead><tbody>' +
       state.historyRows.map(function(r,i){
         var badgeCls = "rank-badge"+(i<3?" top":"");
         return '<tr><td><span class="'+badgeCls+'">'+(i+1)+'</span></td><td>'+esc(r.displayName)+'</td>' +
           '<td class="mono" style="color:var(--ink-soft); font-size:0.75rem;">'+esc(r.period||"&mdash;")+'</td>' +
           '<td class="mono" style="color:var(--ink-soft); font-size:0.75rem;">'+esc(r.code||"&mdash;")+'</td>' +
-          '<td class="num">'+r.round+'</td><td class="num">'+r.score+'</td><td class="num">'+(r.accuracy!=null?r.accuracy+'%':'&mdash;')+'</td></tr>';
+          '<td class="num">'+r.round+'</td><td class="num">'+r.score+'</td><td class="num">'+(r.bestStreak==null?'&mdash;':r.bestStreak)+'</td><td class="num">'+scoreSummary(r)+'</td><td class="num">'+(r.accuracy!=null?r.accuracy+'%':'&mdash;')+'</td></tr>';
       }).join("") + '</tbody></table></div>';
     return '' +
       '<button class="backlink" id="historyBackBtn">&larr; Back to dashboard</button>' +
