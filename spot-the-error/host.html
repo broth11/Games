@@ -78,6 +78,14 @@
   .joined-note{font-family:"IBM Plex Mono",monospace; font-size:0.75rem; color:var(--ink-soft); text-align:center; margin-top:6px;}
   .host-note{font-size:0.78125rem; color:var(--ink-soft); margin-top:4px;}
   .game-code-display{font-family:"IBM Plex Mono",monospace; font-weight:600; letter-spacing:.22em; font-size:clamp(2.875rem,13vw,5rem); line-height:1; color:var(--flag); margin:6px 0 2px;}
+  .dashboard-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:16px;}
+  .dashboard-grid .masthead{margin:0;}
+  .dashboard-footer{text-align:center; margin-top:16px;}
+  @media (min-width:900px){
+    .wrap{max-width:1180px; padding:32px 28px 60px;}
+    .dashboard-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px;}
+    .dashboard-grid .masthead{align-self:center;}
+  }
 
   /* ================= RESULTS CUTSCENE ================= */
   .results-stage{background:#12100E; color:#F6F1E4; border-radius:8px; padding:36px 24px 30px; text-align:center;}
@@ -243,13 +251,13 @@
     var phase = Engine.session.derivePhase(game);
     var mins = state.hostDurationMinutes;
     var running = (phase==="countdown" || phase==="live");
-    return '' + masthead() +
-      '<div class="card" style="text-align:center;">' +
+    return '<div class="dashboard-grid">' + masthead() +
+      '<div class="card dashboard-code" style="text-align:center;">' +
         '<p class="eyebrow" style="margin:0;">Project this for the room</p>' +
         '<div class="game-code-display mono">'+esc(state.hostCode)+'</div>' +
         '<p class="host-note">Students go to the class link and enter this code to join.</p>' +
       '</div>' +
-      '<div class="card" style="margin-top:16px;">' +
+      '<div class="card dashboard-controls">' +
         '<div class="host-top"><div><p class="eyebrow" style="margin:0;">Host controls</p><h2 class="section-title" style="margin:0;">Run the round</h2></div>' +
           '<div class="host-top-right">' + muteBtnHtml() +
             '<span class="phase-pill '+phase+'" id="hostPhasePill">'+phaseLabel(phase)+'</span></div></div>' +
@@ -265,13 +273,14 @@
         (phase==="ended" ? '<button class="btn btn-ghost" id="showResultsBtn" style="margin-top:10px;">Show Round Results</button>' : '') +
         '<p class="host-note">Every device gets its own 5-second countdown the moment it hears the round start, then the full time you set. Anyone joining after that gets whatever time is left on this clock.</p>' +
       '</div>' +
-      '<div class="card" style="margin-top:16px;">' +
+      '<div class="card dashboard-scoreboard">' +
         '<p class="eyebrow" style="margin:0 0 4px;">Live Scoreboard &mdash; this round</p>' +
         '<h2 class="section-title" style="margin:0 0 10px;">Round '+(game?game.round:0)+'</h2>' +
         '<div id="hostScoreWrap">'+scoreTableHtml()+'</div>' +
         '<div class="joined-note" id="hostJoinedNote">'+state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round &middot; board refreshes every 15s</div>' +
       '</div>' +
-      '<div style="text-align:center; margin-top:16px;">' +
+      '</div>' +
+      '<div class="dashboard-footer">' +
         '<button class="link-quiet" id="historyBtn" style="display:block; margin:6px auto 0;">View history (this round · this game · all games)</button>' +
         '<button class="link-quiet" id="newGameToggle" style="display:block; margin:10px auto 0;">Start a different game (new code)</button>' +
         '<div class="reset-box" id="newGameBox" style="display:none; max-width:320px; margin:8px auto 0;">' +
