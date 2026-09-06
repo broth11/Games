@@ -138,8 +138,8 @@
 
   /* ---- PLAY SCREEN STRUCTURE ---- */
   body:has(.play-shell){overflow:hidden;}
-  .wrap:has(.play-shell){max-width:1180px; height:100vh; padding:14px 18px; overflow:hidden;}
-  .play-shell{height:100%; display:grid; grid-template-rows:minmax(0,11fr) minmax(0,62fr) minmax(0,27fr); gap:10px;}
+  .wrap:has(.play-shell){width:94%; max-width:1760px; height:100vh; padding:14px 18px; overflow:hidden;}
+  .play-shell{height:100%; display:grid; grid-template-rows:minmax(0,11fr) minmax(0,74fr) minmax(0,15fr); gap:10px;}
   .play-header{min-height:0; overflow:auto;}
   .play-header .timerbar{margin-bottom:0;}
   .play-header .late-note{margin:6px 0 0;}
@@ -147,16 +147,19 @@
   .play-pane{min-width:0; min-height:0;}
   .play-pane-work .work-card,.play-pane-classify .classify-card{height:100%;}
   .play-pane-work .work-card{display:flex; flex-direction:column;}
+  .play-pane-work .work-head{padding:12px 16px 6px;}
   .play-pane-classify .card{margin-top:0;}
   .classify-card{overflow:auto;}
   .classify-placeholder{height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--ink-soft); font-size:14px; padding:18px;}
+  .play-pane-work .work-body{padding-bottom:10px;}
   .work-body{display:flex; flex:1 1 auto; flex-direction:column; min-height:0; overflow:hidden;}
+  .work-body > p{margin:8px 0;}
   .step-list{min-width:0; min-height:40px; flex:1 1 auto; overflow-y:auto; overscroll-behavior:contain; padding-right:2px;}
   .play-explanation{min-height:0; overflow:hidden;}
   .play-explanation .explain{display:block; height:100%; margin:0; border:1px solid var(--rule); border-radius:10px; overflow-y:auto; overscroll-behavior:contain;}
   .play-explanation .explain-empty{display:flex; align-items:center; justify-content:center; text-align:center; color:var(--ink-soft); font-style:italic;}
-  .task-line{margin:0 0 10px; font-weight:700;}
-  .given-line{display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:8px; margin:0 0 13px; padding:9px 10px; background:var(--card-2); border:1px solid var(--rule); border-radius:6px;}
+  .task-line{margin:0 0 8px; font-weight:700;}
+  .given-line{display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:8px; margin:0 0 11px; padding:9px 10px; background:var(--card-2); border:1px solid var(--rule); border-radius:6px;}
   .given-label{font-weight:700; white-space:nowrap;}
   .task-line .math-step,.given-line .math-step{min-width:0;}
   .work-card--dense .work-body{font-size:16px; line-height:1.32;}
@@ -164,7 +167,7 @@
   .work-card--dense .answer-icon{font-size:16px;}
   .work-card--dense .math-step{overflow-x:auto;}
   @media (max-width:899px){
-    .play-shell{grid-template-rows:minmax(0,10fr) minmax(0,65fr) minmax(0,25fr);}
+    .play-shell{grid-template-rows:minmax(0,10fr) minmax(0,70fr) minmax(0,20fr);}
     .play-layout{display:block; overflow-y:auto; overscroll-behavior:contain;}
     .play-pane-work .work-card,.play-pane-classify .classify-card{height:auto;}
     .play-pane-work .work-body{display:block; overflow:visible;}
