@@ -83,7 +83,7 @@
   .waiting-row .period{font-family:"IBM Plex Mono",monospace; color:var(--ink-soft); font-size:0.75rem; white-space:nowrap;}
   .dashboard-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:16px;}
   .dashboard-grid .masthead{margin:0;}
-  .dashboard-footer{text-align:center; margin-top:16px;}
+  .host-utility-links{text-align:center; margin-top:16px; padding-top:12px; border-top:1px solid var(--rule);}
   @media (min-width:900px){
     .wrap{max-width:1180px; padding:32px 28px 60px;}
     .dashboard-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px;}
@@ -291,20 +291,20 @@
         '<button class="btn btn-ghost" id="hostEndBtn" style="margin-top:10px; display:'+(running?"block":"none")+';">End Round Now</button>' +
         (phase==="ended" ? '<button class="btn btn-ghost" id="showResultsBtn" style="margin-top:10px;">Show Round Results</button>' : '') +
         '<p class="host-note">Every device gets its own 5-second countdown the moment it hears the round start, then the full time you set. Anyone joining after that gets whatever time is left on this clock.</p>' +
+        '<div class="host-utility-links">' +
+          '<button class="link-quiet" id="historyBtn" style="display:block; margin:0 auto;">View history (this round · this game · all games)</button>' +
+          '<button class="link-quiet" id="newGameToggle" style="display:block; margin:8px auto 0;">Start a different game (new code)</button>' +
+          '<div class="reset-box" id="newGameBox" style="display:none; max-width:320px; margin:8px auto 0;">' +
+            '<input type="text" id="newGameConfirm" placeholder="Type NEW to confirm" />' +
+            '<button class="btn btn-ghost btn-sm" id="newGameGo" style="width:auto;">Go</button>' +
+          '</div>' +
+        '</div>' +
       '</div>' +
       '<div class="card dashboard-scoreboard">' +
         (waitingPhase
           ? '<p class="eyebrow" style="margin:0 0 4px;">Waiting Room</p><h2 class="section-title" style="margin:0 0 10px;">Students connected</h2><div id="hostScoreWrap">'+waitingRosterHtml()+'</div><div class="joined-note" id="hostJoinedNote">'+waitingCountText()+' &middot; roster refreshes every 5s</div>'
           : '<p class="eyebrow" style="margin:0 0 4px;">Live Scoreboard &mdash; this round</p><h2 class="section-title" style="margin:0 0 10px;">Round '+(game?game.round:0)+'</h2><div id="hostScoreWrap">'+scoreTableHtml()+'</div><div class="joined-note" id="hostJoinedNote">'+state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round &middot; board refreshes every 5s</div>') +
       '</div>' +
-      '</div>' +
-      '<div class="dashboard-footer">' +
-        '<button class="link-quiet" id="historyBtn" style="display:block; margin:6px auto 0;">View history (this round · this game · all games)</button>' +
-        '<button class="link-quiet" id="newGameToggle" style="display:block; margin:10px auto 0;">Start a different game (new code)</button>' +
-        '<div class="reset-box" id="newGameBox" style="display:none; max-width:320px; margin:8px auto 0;">' +
-          '<input type="text" id="newGameConfirm" placeholder="Type NEW to confirm" />' +
-          '<button class="btn btn-ghost btn-sm" id="newGameGo" style="width:auto;">Go</button>' +
-        '</div>' +
       '</div>';
   }
 
