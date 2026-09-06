@@ -228,6 +228,7 @@
 
   var POLL_MS = 1500;          // lobby / play poll cadence (engine adds jitter)
   var PROGRESS_FLUSH_MS = 5000; // coalesce live-score writes to protect the backend
+  var LOBBY_HEARTBEAT_MS = 10000;
 
   /* ---------------------------------------------------------------
      GROUP 2 PLACEHOLDER CONTENT
@@ -382,6 +383,7 @@ var BANK = [
     else if (state.screen === "leaderboard") app.innerHTML = viewLeaderboard();
     renderKatexSteps();
     bind();
+    syncLobbyPresence();
   }
 
   // Play content is replaced on every item transition, so this must run
@@ -716,10 +718,11 @@ var BANK = [
   /* ---------------------------------------------------------------
      PROGRESS WRITES — coalesced. A full class answering every few
      seconds was previously firing a write per answer, each one taking
-     a script lock. Batching to one write per 5s keeps the host's 15s
+     a script lock. Batching to one write per 5s keeps the host's 5s
      scoreboard just as fresh for a fraction of the backend load.
   ----------------------------------------------------------------*/
   var progTimer = null, progDirty = false;
+  var lobbyPresenceTimer = null;
 
   function pushPlayerProgress(force){
     if (!state.gameCode || state.joinedRound < 0) return;
@@ -738,6 +741,39 @@ var BANK = [
       score: state.score, streak: state.streak, bestStreak: state.bestStreak,
       correct: state.correct, attempted: state.attempted
     });
+  }
+
+  function shouldSendLobbyPresence(){
+    if (state.screen !== "lobby" || !state.gameCode || !Engine.identity.isLoggedIn()) return false;
+    var phase = Engine.session.derivePhase(state.game);
+    return phase === "idle" || phase === "ended";
+  }
+
+  function sendLobbyPresence(){
+    if (!shouldSendLobbyPresence()) return;
+    Engine.players.pushWaitingPresence({
+      code: state.gameCode,
+      studentId: Engine.identity.studentId,
+      displayName: Engine.identity.displayName,
+      period: Engine.identity.period
+    });
+  }
+
+  function stopLobbyPresence(){
+    if (lobbyPresenceTimer) {
+      clearInterval(lobbyPresenceTimer);
+      lobbyPresenceTimer = null;
+    }
+  }
+
+  function syncLobbyPresence(){
+    if (!shouldSendLobbyPresence()) {
+      stopLobbyPresence();
+      return;
+    }
+    if (lobbyPresenceTimer) return;
+    sendLobbyPresence();
+    lobbyPresenceTimer = setInterval(sendLobbyPresence, LOBBY_HEARTBEAT_MS);
   }
 
   /* ---------------------------------------------------------------
@@ -837,6 +873,7 @@ var BANK = [
     if ((el = document.getElementById("toLbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; render(); });
     if ((el = document.getElementById("switchCodeBtn"))) el.addEventListener("click", function(){
       Engine.session.stopPolling();
+      stopLobbyPresence();
       forgetCode();
       state.joinError = "";
       state.screen = "register"; render();
@@ -885,6 +922,7 @@ var BANK = [
       if (game.round !== state.joinedRound){
         var incomingPhase = Engine.session.derivePhase(game);
         if (incomingPhase === "countdown" || incomingPhase === "live"){
+          stopLobbyPresence();
           clearInterval(state.timerId);
           clearTimeout(state.answerTimer); state.answerTimer = null;
           if (state.countdownHandle){ state.countdownHandle.cancel(); state.countdownHandle = null; }

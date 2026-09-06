@@ -29,6 +29,7 @@
 
   var CONFIG = { appsScriptUrl: "", gameType: "", music: null };
   var COUNTDOWN_MS = 5000;
+  var WAITING_ROUND = 0;
   var CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L
 
   function configure(opts) {
@@ -298,6 +299,14 @@
     return apiPost("updatePlayer", Object.assign({ gameType: CONFIG.gameType }, fields)).catch(function () {});
   }
 
+  function pushWaitingPresence(fields) {
+    return pushProgress(Object.assign({
+      round: WAITING_ROUND,
+      score: 0, streak: 0, bestStreak: 0,
+      correct: 0, attempted: 0
+    }, fields || {}));
+  }
+
   function saveRun(payload) {
     return apiPost("saveRun", Object.assign({ gameType: CONFIG.gameType, ts: Date.now() }, payload)).catch(function () {});
   }
@@ -336,6 +345,13 @@
   var audioEls = {};         // phase -> HTMLAudioElement, built on demand
   var audioPhase = null;
   var audioMuted = (lsGet("audioMuted") === "1");
+  var audioBlocked = false;
+
+  function signalAudioChange() {
+    if (global.dispatchEvent && global.CustomEvent) {
+      global.dispatchEvent(new CustomEvent("engineaudiochange"));
+    }
+  }
 
   function getAudioEl(phase) {
     if (audioEls[phase]) return audioEls[phase];
@@ -368,10 +384,21 @@
     if (!el) return;
     el.volume = 0;
     // Rejects if no user gesture has happened yet. On a host page the
-    // teacher has always clicked something first, so this is a non-event.
+    // teacher has usually clicked something first, but restored host tabs
+    // can still hit autoplay policy before any gesture in this page load.
     var p = el.play();
-    if (p && p.catch) p.catch(function () {});
-    fadeTo(el, MUSIC_VOLUME, FADE_MS);
+    if (p && p.then) {
+      p.then(function () {
+        audioBlocked = false;
+        fadeTo(el, MUSIC_VOLUME, FADE_MS);
+      }).catch(function () {
+        audioBlocked = true;
+        signalAudioChange();
+      });
+    } else {
+      audioBlocked = false;
+      fadeTo(el, MUSIC_VOLUME, FADE_MS);
+    }
   }
 
   // Safe to call on every tick — a repeat of the current phase is a no-op.
@@ -394,11 +421,19 @@
   function setMuted(v) {
     audioMuted = !!v;
     lsSet("audioMuted", audioMuted ? "1" : "0");
-    if (audioMuted) Object.keys(audioEls).forEach(function (p) { fadeTo(audioEls[p], 0, FADE_MS); });
-    else if (audioPhase) startPhaseTrack(audioPhase);
+    if (audioMuted) {
+      audioBlocked = false;
+      Object.keys(audioEls).forEach(function (p) { fadeTo(audioEls[p], 0, FADE_MS); });
+    } else if (audioPhase) startPhaseTrack(audioPhase);
   }
 
   function isMuted() { return audioMuted; }
+  function needsGesture() { return !!(audioBlocked && !audioMuted && audioPhase && CONFIG.music && CONFIG.music[audioPhase]); }
+  function unlock() {
+    if (!audioPhase || audioMuted) return;
+    audioBlocked = false;
+    startPhaseTrack(audioPhase);
+  }
 
   /* ---------------------------------------------------------------
      UI HELPERS
@@ -446,6 +481,7 @@
     configure: configure,
     generateCode: generateCode,
     COUNTDOWN_MS: COUNTDOWN_MS,
+    WAITING_ROUND: WAITING_ROUND,
     api: { get: apiGet, post: apiPost },
     identity: identity,
     session: {
@@ -464,11 +500,12 @@
     },
     players: {
       pushProgress: pushProgress,
+      pushWaitingPresence: pushWaitingPresence,
       saveRun: saveRun,
       getPlayers: getPlayers
     },
     leaderboard: { get: getLeaderboard },
-    audio: { playFor: playFor, stop: stopAudio, setMuted: setMuted, isMuted: isMuted },
+    audio: { playFor: playFor, stop: stopAudio, setMuted: setMuted, isMuted: isMuted, needsGesture: needsGesture, unlock: unlock },
     ui: { maskHtml: maskHtml, setMaskNum: setMaskNum, scoreboardTableHtml: scoreboardTableHtml }
   };
 })(window);

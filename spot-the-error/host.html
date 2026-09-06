@@ -78,6 +78,9 @@
   .joined-note{font-family:"IBM Plex Mono",monospace; font-size:0.75rem; color:var(--ink-soft); text-align:center; margin-top:6px;}
   .host-note{font-size:0.78125rem; color:var(--ink-soft); margin-top:4px;}
   .game-code-display{font-family:"IBM Plex Mono",monospace; font-weight:600; letter-spacing:.22em; font-size:clamp(2.875rem,13vw,5rem); line-height:1; color:var(--flag); margin:6px 0 2px;}
+  .waiting-list{display:grid; gap:8px; margin-top:14px;}
+  .waiting-row{display:flex; justify-content:space-between; gap:12px; padding:9px 10px; border:1px solid var(--rule); background:var(--card-2); border-radius:3px;}
+  .waiting-row .period{font-family:"IBM Plex Mono",monospace; color:var(--ink-soft); font-size:0.75rem; white-space:nowrap;}
   .dashboard-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:16px;}
   .dashboard-grid .masthead{margin:0;}
   .dashboard-footer{text-align:center; margin-top:16px;}
@@ -151,7 +154,7 @@
   }
 
   var DEFAULT_MINUTES = 5;
-  var SCORE_REFRESH_MS = 15000;
+  var SCORE_REFRESH_MS = 5000;
   var HOST_POLL_MS = 3000;   // the host writes state; it barely needs to read it
   var HOST_MISS_LIMIT = 4;   // consecutive null polls before we accept the game is gone
   var CLOCK_TICK_MS = 250;   // purely local — the clock never waits on a request
@@ -243,6 +246,20 @@
     ]);
   }
 
+  function waitingRosterHtml(){
+    var rows = state.playersShown || [];
+    if (!rows.length) return '<div class="lb-empty">No students connected yet.</div>';
+    return '<div class="waiting-list">' + rows.map(function(row){
+      var period = row.period ? 'Period '+esc(row.period) : '&mdash;';
+      return '<div class="waiting-row"><span>'+esc(row.displayName || "Student")+'</span><span class="period">'+period+'</span></div>';
+    }).join("") + '</div>';
+  }
+
+  function waitingCountText(){
+    var n = state.playersShown.length;
+    return n + ' student' + (n === 1 ? '' : 's') + ' connected';
+  }
+
   function viewDashboard(){
     if (!state.hostChecked){
       return '' + masthead() + '<div class="card" style="text-align:center;"><p class="eyebrow">Loading&hellip;</p></div>';
@@ -251,6 +268,7 @@
     var phase = Engine.session.derivePhase(game);
     var mins = state.hostDurationMinutes;
     var running = (phase==="countdown" || phase==="live");
+    var waitingPhase = (phase === "idle" || phase === "ended");
     return '<div class="dashboard-grid">' + masthead() +
       '<div class="card dashboard-code" style="text-align:center;">' +
         '<p class="eyebrow" style="margin:0;">Project this for the room</p>' +
@@ -260,6 +278,7 @@
       '<div class="card dashboard-controls">' +
         '<div class="host-top"><div><p class="eyebrow" style="margin:0;">Host controls</p><h2 class="section-title" style="margin:0;">Run the round</h2></div>' +
           '<div class="host-top-right">' + muteBtnHtml() +
+            (Engine.audio.needsGesture && Engine.audio.needsGesture() ? '<button class="mute-btn" id="audioEnableBtn">Enable music</button>' : '') +
             '<span class="phase-pill '+phase+'" id="hostPhasePill">'+phaseLabel(phase)+'</span></div></div>' +
         (state.hostMisses ? '<p class="host-note" id="hostReconnectNote">Reconnecting to the game board&hellip;</p>' : '') +
         '<div class="big-clock mono" id="hostClockNum">'+clockText(game, phase)+'</div>' +
@@ -274,10 +293,9 @@
         '<p class="host-note">Every device gets its own 5-second countdown the moment it hears the round start, then the full time you set. Anyone joining after that gets whatever time is left on this clock.</p>' +
       '</div>' +
       '<div class="card dashboard-scoreboard">' +
-        '<p class="eyebrow" style="margin:0 0 4px;">Live Scoreboard &mdash; this round</p>' +
-        '<h2 class="section-title" style="margin:0 0 10px;">Round '+(game?game.round:0)+'</h2>' +
-        '<div id="hostScoreWrap">'+scoreTableHtml()+'</div>' +
-        '<div class="joined-note" id="hostJoinedNote">'+state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round &middot; board refreshes every 15s</div>' +
+        (waitingPhase
+          ? '<p class="eyebrow" style="margin:0 0 4px;">Waiting Room</p><h2 class="section-title" style="margin:0 0 10px;">Students connected</h2><div id="hostScoreWrap">'+waitingRosterHtml()+'</div><div class="joined-note" id="hostJoinedNote">'+waitingCountText()+' &middot; roster refreshes every 5s</div>'
+          : '<p class="eyebrow" style="margin:0 0 4px;">Live Scoreboard &mdash; this round</p><h2 class="section-title" style="margin:0 0 10px;">Round '+(game?game.round:0)+'</h2><div id="hostScoreWrap">'+scoreTableHtml()+'</div><div class="joined-note" id="hostJoinedNote">'+state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round &middot; board refreshes every 5s</div>') +
       '</div>' +
       '</div>' +
       '<div class="dashboard-footer">' +
@@ -452,6 +470,7 @@
 
   function hostCreateGame(){
     if (state.hostCreating) return;
+    if (!Engine.audio.isMuted()) Engine.audio.playFor("idle");
     state.hostCreating = true; state.hostCreateError = ""; render();
     // Teardown clears the active code but keeps lastHostCode, so a new
     // code still retires the abandoned room and releases its students.
@@ -465,6 +484,7 @@
       startPolling(code);
       render();
     }).catch(function(){
+      Engine.audio.stop();
       state.hostCreating = false;
       state.hostCreateError = "Couldn't create the game. Check your connection and try again.";
       render();
@@ -521,18 +541,30 @@
   }
 
   var scoreTimer = null;
+  function refreshHostPlayers(){
+    if (!state.hostCode || !state.game) return;
+    if (state.screen !== "dashboard") return;   // results screen runs its own poll
+    var phase = Engine.session.derivePhase(state.game);
+    var waitingPhase = (phase === "idle" || phase === "ended");
+    var round = waitingPhase ? Engine.WAITING_ROUND : state.game.round;
+    Engine.players.getPlayers(state.hostCode, round).then(function(rows){
+      state.playersShown = rows || [];
+      var wrap = document.getElementById("hostScoreWrap");
+      if (wrap) wrap.innerHTML = waitingPhase ? waitingRosterHtml() : scoreTableHtml();
+      var note = document.getElementById("hostJoinedNote");
+      if (note) {
+        note.textContent = waitingPhase
+          ? waitingCountText()+' · roster refreshes every 5s'
+          : state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round · board refreshes every 5s';
+      }
+    }).catch(function(){});
+  }
+
   function ensureScoreLoop(){
+    refreshHostPlayers();
     if (scoreTimer) return;
     scoreTimer = setInterval(function(){
-      if (!state.hostCode || !state.game) return;
-      if (state.screen !== "dashboard") return;   // results screen runs its own poll
-      Engine.players.getPlayers(state.hostCode, state.game.round).then(function(rows){
-        state.playersShown = rows || [];
-        var wrap = document.getElementById("hostScoreWrap");
-        if (wrap) wrap.innerHTML = scoreTableHtml();
-        var note = document.getElementById("hostJoinedNote");
-        if (note) note.textContent = state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round · board refreshes every 15s';
-      }).catch(function(){});
+      refreshHostPlayers();
     }, SCORE_REFRESH_MS);
   }
 
@@ -612,6 +644,10 @@
       this.className = "mute-btn" + (Engine.audio.isMuted() ? " muted" : "");
       this.innerHTML = Engine.audio.isMuted() ? "&#128263; Muted" : "&#128266; Sound";
     });
+    if ((el = document.getElementById("audioEnableBtn"))) el.addEventListener("click", function(){
+      Engine.audio.unlock();
+      render();
+    });
     if ((el = document.getElementById("hostCreateBtn"))) el.addEventListener("click", hostCreateGame);
     if ((el = document.getElementById("hostRejoinCode"))) el.addEventListener("input", function(){ this.value = this.value.replace(/[^A-Z0-9]/gi, "").toUpperCase().slice(0,6); });
     if ((el = document.getElementById("hostRejoinBtn"))) el.addEventListener("click", hostRejoinGame);
@@ -636,6 +672,12 @@
         var input = document.getElementById("hostMinutes"); if (input) input.value = m;
         render();
       });
+    });
+  }
+
+  if (window.addEventListener) {
+    window.addEventListener("engineaudiochange", function(){
+      if (state.screen === "dashboard") render();
     });
   }
 
