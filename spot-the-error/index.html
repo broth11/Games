@@ -137,10 +137,24 @@
   .verdict-btn:disabled{opacity:.5; cursor:default;} .verdict-btn.clean-btn{grid-column:1 / -1;}
 
   /* ---- PLAY SCREEN STRUCTURE ---- */
-  .play-layout{display:grid; grid-template-columns:minmax(0,1fr); gap:16px; align-items:start;}
-  .play-pane{min-width:0;}
+  body:has(.play-shell){overflow:hidden;}
+  .wrap:has(.play-shell){max-width:1180px; height:100vh; padding:14px 18px; overflow:hidden;}
+  .play-shell{height:100%; display:grid; grid-template-rows:minmax(0,11fr) minmax(0,62fr) minmax(0,27fr); gap:10px;}
+  .play-header{min-height:0; overflow:auto;}
+  .play-header .timerbar{margin-bottom:0;}
+  .play-header .late-note{margin:6px 0 0;}
+  .play-layout{display:grid; grid-template-columns:minmax(0,1.35fr) minmax(340px,.95fr); gap:18px; min-height:0;}
+  .play-pane{min-width:0; min-height:0;}
+  .play-pane-work .work-card,.play-pane-classify .classify-card{height:100%;}
+  .play-pane-work .work-card{display:flex; flex-direction:column;}
   .play-pane-classify .card{margin-top:0;}
-  .step-list{min-width:0;}
+  .classify-card{overflow:auto;}
+  .classify-placeholder{height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--ink-soft); font-size:14px; padding:18px;}
+  .work-body{display:flex; flex:1 1 auto; flex-direction:column; min-height:0; overflow:hidden;}
+  .step-list{min-width:0; min-height:40px; flex:1 1 auto; overflow-y:auto; overscroll-behavior:contain; padding-right:2px;}
+  .play-explanation{min-height:0; overflow:hidden;}
+  .play-explanation .explain{display:block; height:100%; margin:0; border:1px solid var(--rule); border-radius:10px; overflow-y:auto; overscroll-behavior:contain;}
+  .play-explanation .explain-empty{display:flex; align-items:center; justify-content:center; text-align:center; color:var(--ink-soft); font-style:italic;}
   .task-line{margin:0 0 10px; font-weight:700;}
   .given-line{display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:8px; margin:0 0 13px; padding:9px 10px; background:var(--card-2); border:1px solid var(--rule); border-radius:6px;}
   .given-label{font-weight:700; white-space:nowrap;}
@@ -149,12 +163,18 @@
   .work-card--dense .step-choice{margin:5px 0; padding:8px 10px;}
   .work-card--dense .answer-icon{font-size:16px;}
   .work-card--dense .math-step{overflow-x:auto;}
-  @media (max-width:560px){
-    .work-card--dense .step-list{max-height:52vh; overflow-y:auto; overscroll-behavior:contain; padding-right:2px;}
-  }
-  @media (min-width:900px){
-    .wrap:has(.play-layout){max-width:1180px;}
-    .play-layout.has-classify{grid-template-columns:minmax(0,1.35fr) minmax(340px,.95fr); gap:18px;}
+  @media (max-width:899px){
+    .play-shell{grid-template-rows:minmax(0,10fr) minmax(0,65fr) minmax(0,25fr);}
+    .play-layout{display:block; overflow-y:auto; overscroll-behavior:contain;}
+    .play-pane-work .work-card,.play-pane-classify .classify-card{height:auto;}
+    .play-pane-work .work-body{display:block; overflow:visible;}
+    .play-pane-classify{margin-top:10px;}
+    .step-list{min-height:0; max-height:31vh; overflow-y:auto;}
+    .play-pane-classify .classify-card{padding:14px; max-height:none;}
+    .play-pane-classify .verdicts{gap:8px; margin-top:10px;}
+    .play-pane-classify .verdict-btn{min-height:0; padding:9px 10px; gap:2px;}
+    .play-pane-classify .verdict-btn .vlabel{font-size:14px;}
+    .play-pane-classify .verdict-btn .vsub{display:none;}
   }
 
   .score-hero{text-align:center; padding:8px 0 4px;}
@@ -552,24 +572,33 @@ var BANK = [
     var lateNote = state.joinedLate
       ? '<div class="late-note">Joined mid-round &mdash; you have '+mmss(state.joinedSeconds)+' left on the room clock.</div>'
       : '';
+    var classify = state.stage === "classify"
+      ? '<p class="eyebrow">Stage 2</p><h2 class="section-title">Classify the slip</h2><div class="verdicts" id="verdictGrid">'+btns+'</div><button class="btn btn-ghost skip-control" id="skipCategoryBtn" '+(state.answering?"disabled":"")+'>Skip this item</button>'
+      : '<div class="classify-placeholder">Stage 2 will appear here after you locate an error.</div>';
+    var explanation = state.feedback
+      ? '<div class="explain show"><b>'+esc(state.feedback.title)+'.</b> '+esc(state.feedback.detail)+'<br>'+card.explanation+'</div>'
+      : '<div class="explain explain-empty">Feedback will appear here after you respond.</div>';
     return '' +
-      '<div class="hud">' +
-        '<div class="hud-block">Score<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div>' +
-        '<div class="hud-block">Streak<span class="hud-num mono" id="streakNum">'+state.streak+'</span></div>' +
-        '<div class="hud-block">Time Left<span class="hud-num mono" id="secLeft">'+mmss(state.secondsLeft)+'</span></div>' +
+      '<div class="play-shell">' +
+      '<div class="play-header"><div class="hud">' +
+          '<div class="hud-block">Score<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div>' +
+          '<div class="hud-block">Streak<span class="hud-num mono" id="streakNum">'+state.streak+'</span></div>' +
+          '<div class="hud-block">Time Left<span class="hud-num mono" id="secLeft">'+mmss(state.secondsLeft)+'</span></div>' +
+        '</div>' +
+        '<div class="timerbar"><div class="timerfill" id="timerFill" style="width:'+pct+'%; background:'+barColor+';"></div></div>' +
+        lateNote +
       '</div>' +
-      '<div class="timerbar"><div class="timerfill" id="timerFill" style="width:'+pct+'%; background:'+barColor+';"></div></div>' +
-      lateNote +
-      '<div class="play-layout'+(state.stage === "classify" ? ' has-classify' : '')+'">' +
+      '<div class="play-layout">' +
       '<div class="play-pane play-pane-work"><div class="work-card'+(card.steps.length > 5 ? ' work-card--dense' : '')+'">' +
         '<div class="work-head"><div class="work-who"><div class="work-title">Worked derivative</div><div class="work-meta">'+esc(card.tier)+' tier</div></div></div>' +
         '<div class="work-body">'+task+given+'<p><b>Stage 1: Locate the error.</b> Tap the first incorrect step, or choose Clean.</p><div id="stepList" class="step-list">'+steps+'</div>' +
           '<button class="btn btn-ghost" id="cleanChoice" '+(state.answering || state.stage !== "locate"?"disabled":"")+'>Clean — No Error'+iconHtml(state.icons.clean)+'</button>' +
           '<button class="btn btn-ghost skip-control" id="skipLocateBtn" '+(state.answering || state.stage !== "locate"?"disabled":"")+'>Skip this item</button></div>' +
       '</div></div>' +
-      (state.stage === "classify" ? '<div class="play-pane play-pane-classify"><div class="card"><p class="eyebrow">Stage 2</p><h2 class="section-title">Classify the slip</h2><div class="verdicts" id="verdictGrid">'+btns+'</div><button class="btn btn-ghost skip-control" id="skipCategoryBtn" '+(state.answering?"disabled":"")+'>Skip this item</button></div></div>' : '') +
+      '<div class="play-pane play-pane-classify"><div class="card classify-card">'+classify+'</div></div>' +
       '</div>' +
-      (state.feedback ? '<div class="explain show"><b>'+esc(state.feedback.title)+'.</b> '+esc(state.feedback.detail)+'<br>'+card.explanation+'</div>' : '');
+      '<div class="play-explanation">'+explanation+'</div>' +
+      '</div>';
   }
 
   function resolveItem(points, fullyCorrect, title, detail){
