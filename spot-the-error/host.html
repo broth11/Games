@@ -128,7 +128,12 @@
 
   Engine.configure({
     appsScriptUrl: "https://script.google.com/macros/s/AKfycbwdGJAOLH5JskqJTckVxZuOGcu-nBAEj0DXe5M2tKcWHby4ZfVRM_1-IL11WA_g0iIr7Q/exec",
-    gameType: "spot-the-error-derivatives"
+    gameType: "spot-the-error-derivatives",
+    // Host-only music. The omitted countdown and ended phases are silent.
+    music: {
+      idle: "../audio/spot-the-error/idle.mp3",
+      live: "../audio/spot-the-error/live.mp3"
+    }
   });
 
   function muteBtnHtml(){

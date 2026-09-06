@@ -3,9 +3,9 @@
 One subfolder per `gameType`, mirroring the game folders at the repo root.
 A game's `host.html` points at these with `../audio/<game-type>/<file>.mp3`.
 
-**Everything currently in here is a synthesized placeholder.** They are correct
-in format and loop seamlessly, but they are plain tones — fine for verifying the
-wiring works, not fine for a real class. Replace them.
+The Skew the Feed files are synthesized placeholders: correct in format and
+seamlessly looping, but plain tones intended for wiring checks. Spot the Error
+uses the credited OpenGameArt tracks listed below.
 
 ## Replacing a placeholder
 
@@ -47,3 +47,10 @@ results podium is read in quiet.
 The engine plays at 0.35 and fades over 450ms. If that's still too loud through
 your room's speakers, change `MUSIC_VOLUME` in `engine.js` rather than
 re-encoding the files — it's one constant and it applies to every game.
+
+## Credits
+
+- **Spot the Error — `live.mp3`:** “Cyberpunk Moonlight Sonata” by Joth,
+  sourced from OpenGameArt; CC0 (public domain).
+- **Spot the Error — `idle.mp3`:** “In the Lobby” by Umplix, sourced from
+  OpenGameArt; CC0 (public domain).
