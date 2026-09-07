@@ -313,7 +313,12 @@
     return !!ts && (Date.now() - ts) < CODE_TTL_MS;
   }
 
-  state.gameCode = lsGet("skewfeed_code");
+  // Always start a fresh page load without a remembered game code — a
+  // new class period means a new code, and auto-rejoining a stale one is
+  // more confusing than just asking again. The student ID is a separate
+  // localStorage key (handled by Engine.identity) and is left untouched.
+  state.gameCode = "";
+  lsSet("skewfeed_code", "");
 
   /* ---------------------------------------------------------------
      RENDER ROUTER
@@ -802,18 +807,6 @@
   /* ---------------------------------------------------------------
      BOOT
   ----------------------------------------------------------------*/
-  if (Engine.identity.isLoggedIn() && state.gameCode && cachedCodeIsFresh()){
-    state.screen = "lobby";
-    startGamePolling(state.gameCode);
-  } else if (state.gameCode && !cachedCodeIsFresh()){
-    // Old enough that the teacher has likely moved on to a different code
-    // (next period, next day). Don't silently sit in a dead lobby — land
-    // back on register instead. Leave state.gameCode as-is so the code
-    // field shows the old value prefilled (one tap to re-join if it's
-    // still the same code), but clear the stored timestamp so we don't
-    // keep re-triggering this on every reload.
-    lsClear("skewfeed_code_ts");
-  }
   refreshLeaderboard();
   // Only poll the leaderboard on screens that actually show it — this
   // used to run every 15s on every device even mid-round.

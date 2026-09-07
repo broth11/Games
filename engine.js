@@ -148,16 +148,17 @@
   // applied only if it's still the most recent request in flight.
   var pollSeq = 0;
 
-  // Would applying `next` move us BACKWARD relative to a write we just
-  // made ourselves? The host writes optimistically and locally before
-  // the network confirms, so a poll already in flight can come back
-  // carrying the pre-write row and briefly undo the host's own click.
-  function isStaleAgainstLocalWrite(next) {
-    if (!next || !currentGame || !localWriteAt) return false;
-    if (Date.now() - localWriteAt > 15000) return false; // long settled by now
-    if (next.round < currentGame.round) return true;
-    if (next.round === currentGame.round &&
-        (next.startedAt || 0) < (currentGame.startedAt || 0)) return true;
+  // Guards against a poll response that reflects the server's state from
+  // BEFORE a manual startRound/endRound write has landed. Without this, a
+  // slow-to-arrive poll can show the old, still-running round and clobber
+  // the local state we already updated optimistically — which looks like
+  // the round "restarting" on its own right after End Round Now was
+  // clicked.
+  function isStaleAgainstLocal(fetched, known) {
+    if (!known || !fetched) return false;
+    if (fetched.code !== known.code) return false;
+    if (fetched.round < known.round) return true;
+    if (fetched.round === known.round && known.gameEndsAt && fetched.gameEndsAt > known.gameEndsAt) return true;
     return false;
   }
 
@@ -180,9 +181,9 @@
       apiGet("getGame", { code: code }).then(function (game) {
         if (mySeq !== pollSeq) return;
         var retired = !!(game && game.retired);
-        var next = (game && game.exists && !retired) ? game : null;
-        if (isStaleAgainstLocalWrite(next)) { onUpdate(currentGame, { retired: false }); return; }
-        currentGame = next;
+        var fetchedGame = (game && game.exists && !retired) ? game : null;
+        if (isStaleAgainstLocal(fetchedGame, currentGame)) return;
+        currentGame = fetchedGame;
         onUpdate(currentGame, { retired: retired });
       }).catch(function () { /* transient hiccup — next tick retries */ })
         .then(function () {
