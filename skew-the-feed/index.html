@@ -41,6 +41,14 @@
   :focus-visible{outline:3px solid var(--focus); outline-offset:2px;}
   @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
   .wrap{max-width:640px; margin:0 auto; padding:28px 18px 60px;}
+  .wrap:has(.register-shell){max-width:1040px;}
+  .register-shell{display:block;}
+  .register-cols{display:flex; flex-direction:column; gap:16px;}
+  @media (min-width:760px){
+    .register-cols{display:grid; grid-template-columns:1fr 1fr; align-items:start; gap:20px;}
+    .register-cols .card{margin-top:0;}
+  }
+  .register-leaderboard{margin-top:20px;}
   .masthead{text-align:center; margin-bottom:22px;}
   .kicker{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;}
   .nameplate{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(40px,10vw,64px); line-height:0.9; letter-spacing:0.01em; text-transform:uppercase; text-wrap:balance; margin:0;}
@@ -363,24 +371,30 @@
     }).join("");
     return '' +
       masthead() +
-      '<div class="card stack">' +
-        '<div><p class="eyebrow">Your Assignment</p><h2 class="section-title">Work the desk</h2>' +
-        '<p>Posts, polls, and headlines will cross your desk one at a time. When the news desk kicks off the shift, stamp each one with the flaw in how the data was collected &mdash; or clear it as clean.</p></div>' +
-        '<div class="legend">' + legendRows + '</div>' +
-      '</div>' +
-      '<div class="card stack" style="margin-top:16px;">' +
-        '<div><p class="eyebrow">Byline</p><h2 class="section-title">Sign in to the desk</h2></div>' +
-        '<div class="field"><label for="codeInput">Game code (from your teacher\'s screen)</label>' +
-          '<input id="codeInput" class="code-input" type="text" maxlength="6" placeholder="&mdash; &mdash; &mdash; &mdash;" value="'+esc(state.gameCode)+'" autocomplete="off" autocapitalize="characters" />' +
-          '<p style="font-size:11.5px; color:var(--ink-soft); margin:6px 2px 0;">Letters and numbers only &mdash; codes never use 0, 1, I, L, or O.</p></div>' +
-        '<div class="field"><label for="idInput">Your student ID</label>' +
-          '<input id="idInput" type="text" inputmode="numeric" maxlength="10" placeholder="e.g. 19136" value="'+esc(Engine.identity.studentId)+'" /></div>' +
-        '<div class="err" id="regErr">' + esc(state.joinError) + '</div>' +
-        '<button class="btn btn-flag" id="startBtn">Join the Newsroom</button>' +
-      '</div>' +
-      leaderboardPreview() +
-      '<div style="text-align:center;"><button class="link-quiet" id="toLbBtn">View full leaderboard &rarr;</button></div>' +
-      '<p class="foot-note">Every completed shift is logged to the shared newsroom board.</p>';
+      '<div class="register-shell">' +
+        '<div class="register-cols">' +
+          '<div class="card stack">' +
+            '<div><p class="eyebrow">Your Assignment</p><h2 class="section-title">Work the desk</h2>' +
+            '<p>Posts, polls, and headlines will cross your desk one at a time. When the news desk kicks off the shift, stamp each one with the flaw in how the data was collected &mdash; or clear it as clean.</p></div>' +
+            '<div class="legend">' + legendRows + '</div>' +
+          '</div>' +
+          '<div class="card stack">' +
+            '<div><p class="eyebrow">Byline</p><h2 class="section-title">Sign in to the desk</h2></div>' +
+            '<div class="field"><label for="codeInput">Game code (from your teacher\'s screen)</label>' +
+              '<input id="codeInput" class="code-input" type="text" maxlength="6" placeholder="&mdash; &mdash; &mdash; &mdash;" value="'+esc(state.gameCode)+'" autocomplete="off" autocapitalize="characters" />' +
+              '<p style="font-size:11.5px; color:var(--ink-soft); margin:6px 2px 0;">Letters and numbers only &mdash; codes never use 0, 1, I, L, or O.</p></div>' +
+            '<div class="field"><label for="idInput">Your student ID</label>' +
+              '<input id="idInput" type="text" inputmode="numeric" maxlength="10" placeholder="e.g. 19136" value="'+esc(Engine.identity.studentId)+'" /></div>' +
+            '<div class="err" id="regErr">' + esc(state.joinError) + '</div>' +
+            '<button class="btn btn-flag" id="startBtn">Join the Newsroom</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="register-leaderboard">' +
+          leaderboardPreview() +
+          '<div style="text-align:center;"><button class="link-quiet" id="toLbBtn">View full leaderboard &rarr;</button></div>' +
+          '<p class="foot-note">Every completed shift is logged to the shared newsroom board.</p>' +
+        '</div>' +
+      '</div>';
   }
 
   function leaderboardPreview(){
