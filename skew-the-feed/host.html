@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <style>
   :root{
     --paper:#E7EBE2; --card:#F8FAF4; --card-2:#EFF2E8; --ink:#1B1F1A; --ink-soft:#565F53;
@@ -54,6 +55,7 @@
   .err{color:var(--flag); font-size:13px; margin-top:8px; min-height:16px;}
   .code-input{text-transform:uppercase; text-align:center; letter-spacing:.3em; font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:22px !important;}
   .link-quiet{background:none; border:none; color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; font-size:12px; text-decoration:underline; cursor:pointer; padding:6px 0;}
+  .link-quiet i{font-size:0.95em; margin-right:6px;}
   .music-credit{margin-top:10px; font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink-soft); line-height:1.4; text-align:center;}
   table.lb{width:100%; border-collapse:collapse; margin-top:14px; font-size:14px;}
   table.lb th{text-align:left; font-family:"IBM Plex Mono",monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); padding:0 6px 8px; border-bottom:2px solid var(--ink);}
@@ -79,6 +81,17 @@
   .joined-note{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft); text-align:center; margin-top:6px;}
   .host-note{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
   .game-code-display{font-family:"IBM Plex Mono",monospace; font-weight:600; letter-spacing:.22em; font-size:clamp(46px,13vw,80px); line-height:1; color:var(--flag); margin:6px 0 2px;}
+  .waiting-list{display:grid; gap:8px; margin-top:14px;}
+  .waiting-row{display:flex; justify-content:space-between; gap:12px; padding:9px 10px; border:1px solid var(--rule); background:var(--card-2); border-radius:3px;}
+  .waiting-row .period{font-family:"IBM Plex Mono",monospace; color:var(--ink-soft); font-size:12px; white-space:nowrap;}
+  .dashboard-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:16px;}
+  .dashboard-grid .masthead{margin:0;}
+  .host-utility-links{text-align:center; margin-top:16px; padding-top:12px; border-top:1px solid var(--rule);}
+  @media (min-width:900px){
+    .wrap{max-width:1180px; padding:32px 28px 60px;}
+    .dashboard-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px;}
+    .dashboard-grid .masthead{align-self:center;}
+  }
 
   /* ================= RESULTS CUTSCENE ================= */
   .results-stage{background:#12100E; color:#F6F1E4; border-radius:8px; padding:36px 24px 30px; text-align:center;}
@@ -146,7 +159,7 @@
   }
 
   var DEFAULT_MINUTES = 5;
-  var SCORE_REFRESH_MS = 15000;
+  var SCORE_REFRESH_MS = 5000;
   var HOST_POLL_MS = 3000;   // the host writes state; it barely needs to read it
   var HOST_MISS_LIMIT = 4;   // consecutive null polls before we accept the game is gone
   var CLOCK_TICK_MS = 250;   // purely local — the clock never waits on a request
@@ -162,7 +175,7 @@
     hostCode: "", lastHostCode: "", hostChecked: false, hostCreating: false, hostCreateError: "",
     hostRejoining: false, hostRejoinError: "", hostMisses: 0,
     game: null, hostDurationMinutes: DEFAULT_MINUTES,
-    playersShown: [],
+    playersShown: [], playersRound: null,
     screen: "dashboard",       // dashboard | results | history
     resultsRound: null, resultsRows: [], resultsLoading: false, tallySeen: 0,
     historyTab: "round",       // round | game | all
@@ -219,13 +232,31 @@
     return "Done";
   }
 
-  function scoreTableHtml(){
-    return Engine.ui.scoreboardTableHtml(state.playersShown, [
+  function rowsForRound(round){
+    return state.playersRound === round ? state.playersShown : [];
+  }
+
+  function scoreTableHtml(round){
+    return Engine.ui.scoreboardTableHtml(rowsForRound(round), [
       {key:"displayName", label:"Name"},
       {key:"period", label:"Period"},
       {key:"score", label:"Score", numeric:true},
       {key:"streak", label:"Streak", numeric:true}
     ]);
+  }
+
+  function waitingRosterHtml(){
+    var rows = rowsForRound(Engine.WAITING_ROUND);
+    if (!rows.length) return '<div class="lb-empty">No students connected yet.</div>';
+    return '<div class="waiting-list">' + rows.map(function(row){
+      var period = row.period ? 'Period '+esc(row.period) : '&mdash;';
+      return '<div class="waiting-row"><span>'+esc(row.displayName || "Student")+'</span><span class="period">'+period+'</span></div>';
+    }).join("") + '</div>';
+  }
+
+  function waitingCountText(){
+    var n = rowsForRound(Engine.WAITING_ROUND).length;
+    return n + ' student' + (n === 1 ? '' : 's') + ' connected';
   }
 
   function viewDashboard(){
@@ -236,13 +267,15 @@
     var phase = Engine.session.derivePhase(game);
     var mins = state.hostDurationMinutes;
     var running = (phase==="countdown" || phase==="live");
-    return '' + masthead() +
-      '<div class="card" style="text-align:center;">' +
+    var waitingPhase = (phase === "idle" || phase === "ended");
+    var liveCount = rowsForRound(game ? game.round : null).length;
+    return '<div class="dashboard-grid">' + masthead() +
+      '<div class="card dashboard-code" style="text-align:center;">' +
         '<p class="eyebrow" style="margin:0;">Project this for the room</p>' +
         '<div class="game-code-display mono">'+esc(state.hostCode)+'</div>' +
         '<p class="host-note">Students go to the class link and enter this code to join.</p>' +
       '</div>' +
-      '<div class="card" style="margin-top:16px;">' +
+      '<div class="card dashboard-controls">' +
         '<div class="host-top"><div><p class="eyebrow" style="margin:0;">Front of Room</p><h2 class="section-title" style="margin:0;">Run the shift</h2></div>' +
           '<div class="host-top-right">' + muteBtnHtml() +
             (Engine.audio.needsGesture && Engine.audio.needsGesture() ? '<button class="mute-btn" id="audioEnableBtn">Enable music</button>' : '') +
@@ -258,21 +291,21 @@
         '<button class="btn btn-ghost" id="hostEndBtn" style="margin-top:10px; display:'+(running?"block":"none")+';">End Round Now</button>' +
         (phase==="ended" ? '<button class="btn btn-ghost" id="showResultsBtn" style="margin-top:10px;">Show Round Results</button>' : '') +
         '<p class="host-note">Every device gets its own 5-second countdown the moment it hears the round start, then the full time you set. Anyone joining after that gets whatever time is left on this clock.</p>' +
-      '</div>' +
-      '<div class="card" style="margin-top:16px;">' +
-        '<p class="eyebrow" style="margin:0 0 4px;">Live Scoreboard &mdash; this round</p>' +
-        '<h2 class="section-title" style="margin:0 0 10px;">Round '+(game?game.round:0)+'</h2>' +
-        '<div id="hostScoreWrap">'+scoreTableHtml()+'</div>' +
-        '<div class="joined-note" id="hostJoinedNote">'+state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round &middot; board refreshes every 15s</div>' +
-      '</div>' +
-      '<div style="text-align:center; margin-top:16px;">' +
-        '<button class="link-quiet" id="historyBtn" style="display:block; margin:6px auto 0;">View history (this round · this game · all games)</button>' +
-        '<button class="link-quiet" id="newGameToggle" style="display:block; margin:10px auto 0;">Start a different game (new code)</button>' +
-        '<div class="reset-box" id="newGameBox" style="display:none; max-width:320px; margin:8px auto 0;">' +
-          '<input type="text" id="newGameConfirm" placeholder="Type NEW to confirm" />' +
-          '<button class="btn btn-ghost btn-sm" id="newGameGo" style="width:auto;">Go</button>' +
+        '<div class="host-utility-links">' +
+          '<button class="link-quiet" id="historyBtn" style="display:block; margin:0 auto;"><i class="fa-solid fa-square-poll-vertical" aria-hidden="true"></i>View history (this round · this game · all games)</button>' +
+          '<button class="link-quiet" id="newGameToggle" style="display:block; margin:8px auto 0;"><i class="fa-solid fa-square-binary" aria-hidden="true"></i>Start a different game (new code)</button>' +
+          '<div class="reset-box" id="newGameBox" style="display:none; max-width:320px; margin:8px auto 0;">' +
+            '<input type="text" id="newGameConfirm" placeholder="Type NEW to confirm" />' +
+            '<button class="btn btn-ghost btn-sm" id="newGameGo" style="width:auto;">Go</button>' +
+          '</div>' +
+          '<div class="music-credit">Music: &ldquo;In the Lobby&rdquo; by Umplix; &ldquo;Endless Cyber Runner&rdquo; by Eric Matyas (soundimage.org).</div>' +
         '</div>' +
-        '<div class="music-credit">Music: &ldquo;In the Lobby&rdquo; by Umplix; &ldquo;Endless Cyber Runner&rdquo; by Eric Matyas (soundimage.org).</div>' +
+      '</div>' +
+      '<div class="card dashboard-scoreboard">' +
+        (waitingPhase
+          ? '<p class="eyebrow" style="margin:0 0 4px;">Waiting Room</p><h2 class="section-title" style="margin:0 0 10px;">Students connected</h2><div id="hostScoreWrap">'+waitingRosterHtml()+'</div><div class="joined-note" id="hostJoinedNote">'+waitingCountText()+' &middot; roster refreshes every 5s</div>'
+          : '<p class="eyebrow" style="margin:0 0 4px;">Live Scoreboard &mdash; this round</p><h2 class="section-title" style="margin:0 0 10px;">Round '+(game?game.round:0)+'</h2><div id="hostScoreWrap">'+scoreTableHtml(game ? game.round : null)+'</div><div class="joined-note" id="hostJoinedNote">'+liveCount+' team'+(liveCount===1?'':'s')+' reporting this round &middot; board refreshes every 5s</div>') +
+      '</div>' +
       '</div>';
   }
 
@@ -445,7 +478,7 @@
     var retireCode = state.hostCode || state.lastHostCode || undefined;
     Engine.session.createGame(retireCode).then(function(code){
       state.hostCreating = false; state.hostCode = code; state.lastHostCode = code; state.hostChecked = false;
-      state.hostMisses = 0;
+      state.hostMisses = 0; state.playersShown = []; state.playersRound = null;
       state.hostDurationMinutes = DEFAULT_MINUTES;
       lsSet("skewfeed_host_code", code);
       lsSet("skewfeed_last_host_code", code);
@@ -471,7 +504,7 @@
     // so the host's own screen reacts on the click with no round trip.
     var game = Engine.session.startRound(state.hostCode, mins);
     state.game = game; lastRound = game.round; lastLocalPhase = null;
-    state.playersShown = [];
+    state.playersShown = []; state.playersRound = null;
     state.screen = "dashboard";
     render();
   }
@@ -489,7 +522,7 @@
         return;
       }
       state.hostCode = code; state.lastHostCode = code; state.hostChecked = false; state.hostMisses = 0;
-      state.game = null; state.screen = "dashboard"; lastRound = null;
+      state.game = null; state.playersShown = []; state.playersRound = null; state.screen = "dashboard"; lastRound = null;
       lsSet("skewfeed_host_code", code);
       lsSet("skewfeed_last_host_code", code);
       startPolling(code);
@@ -514,12 +547,18 @@
     scoreTimer = setInterval(function(){
       if (!state.hostCode || !state.game) return;
       if (state.screen !== "dashboard") return;   // results screen runs its own poll
-      Engine.players.getPlayers(state.hostCode, state.game.round).then(function(rows){
+      var phase = Engine.session.derivePhase(state.game);
+      var waitingPhase = (phase === "idle" || phase === "ended");
+      var round = waitingPhase ? Engine.WAITING_ROUND : state.game.round;
+      Engine.players.getPlayers(state.hostCode, round).then(function(rows){
         state.playersShown = rows || [];
+        state.playersRound = round;
         var wrap = document.getElementById("hostScoreWrap");
-        if (wrap) wrap.innerHTML = scoreTableHtml();
+        if (wrap) wrap.innerHTML = waitingPhase ? waitingRosterHtml() : scoreTableHtml(round);
         var note = document.getElementById("hostJoinedNote");
-        if (note) note.textContent = state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round · board refreshes every 15s';
+        if (note) note.textContent = waitingPhase
+          ? waitingCountText()+' · roster refreshes every 5s'
+          : state.playersShown.length+' team'+(state.playersShown.length===1?'':'s')+' reporting this round · board refreshes every 5s';
       }).catch(function(){});
     }, SCORE_REFRESH_MS);
   }
@@ -583,7 +622,7 @@
       var roundChanged = game.round !== lastRound;
       lastRound = game.round;
       if (roundChanged){
-        state.playersShown = [];
+        state.playersShown = []; state.playersRound = null;
         lastLocalPhase = null;
         render();
       } else if (wasReconnecting || !document.getElementById("hostPhasePill") && state.screen === "dashboard"){

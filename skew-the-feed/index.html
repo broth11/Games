@@ -34,6 +34,7 @@
     background: radial-gradient(circle at 1px 1px, var(--rule) 1px, transparent 0) 0 0/16px 16px, var(--paper);
     color:var(--ink); font-family:"IBM Plex Sans",-apple-system,system-ui,sans-serif; -webkit-font-smoothing:antialiased; min-height:100vh;
   }
+  body.play-active{height:100vh; overflow:hidden;}
   .mono{font-family:"IBM Plex Mono","SF Mono",monospace; font-variant-numeric:tabular-nums;}
   .display{font-family:"Big Shoulders Display","Arial Narrow",sans-serif;}
   a{color:inherit;} button{font-family:inherit;}
@@ -96,9 +97,16 @@
   .hud{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:14px;}
   .hud-block{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em;}
   .hud-num{font-size:20px; font-weight:600; color:var(--ink); display:block;}
+  .play-active .wrap{height:100vh; max-width:900px; padding:14px 18px; overflow:hidden;}
+  .play-shell{height:100%; display:grid; grid-template-rows:16% minmax(0,66%) 18%; gap:12px; overflow:hidden;}
+  .play-header{min-height:0; overflow:hidden;}
+  .play-main{min-height:0; overflow:auto; padding-right:4px;}
+  .play-main > * + *{margin-top:14px;}
+  .play-feedback{min-height:0; overflow:auto;}
   .timerbar{height:8px; background:var(--card-2); border:1px solid var(--rule); border-radius:5px; overflow:hidden; margin-bottom:20px;}
+  .play-header .timerbar{margin-bottom:0;}
   .timerfill{height:100%; background:var(--flag); width:100%; transition:width 1s linear, background .3s;}
-  .late-note{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--nonresp); text-align:center; margin:-12px 0 14px;}
+  .late-note{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--nonresp); text-align:center; margin:0;}
   .postcard{position:relative; background:var(--card); border:1px solid var(--rule); border-radius:10px; box-shadow:var(--shadow); overflow:hidden;}
   .post-head{display:flex; align-items:center; gap:10px; padding:14px 16px 10px;}
   .avatar{width:38px; height:38px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; font-family:"Big Shoulders Display",sans-serif; font-weight:800; font-size:16px; color:var(--flag-ink); background:var(--flag);}
@@ -113,9 +121,20 @@
   .stamp{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(22px,6vw,34px); text-transform:uppercase; letter-spacing:.02em; padding:10px 22px; border-radius:6px; border:4px solid currentColor; transform:rotate(-7deg); text-align:center; box-shadow:0 6px 18px rgba(0,0,0,0.25);}
   .stamp.correct{color:var(--wire); background:var(--wire-ink);}
   .stamp.wrong{color:var(--flag); background:var(--flag-ink);}
-  .explain{background:var(--card); border:1px solid var(--rule); border-top:none; border-radius:0 0 10px 10px; margin-top:-1px; padding:14px 16px 16px; font-size:14.5px; color:var(--ink-soft); display:none;}
+  .explain{background:var(--card); border:1px solid var(--rule); border-radius:10px; min-height:100%; padding:14px 16px 16px; font-size:14.5px; color:var(--ink-soft); display:flex; align-items:center;}
+  .explain.placeholder{font-style:italic;}
   .explain.show{display:block;} .explain b{color:var(--ink);}
-  .verdicts{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px;}
+  .verdicts{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:0;}
+  @media (max-width:899px){
+    .play-active .wrap{padding:10px 12px;}
+    .play-shell{grid-template-rows:15% minmax(0,63%) 22%; gap:10px;}
+    .hud{gap:8px;}
+    .hud-block{font-size:11px;}
+    .hud-num{font-size:18px;}
+    .post-body{font-size:16.5px;}
+    .verdicts{gap:9px;}
+    .verdict-btn{padding:14px 12px;}
+  }
   .verdict-btn{padding:18px 14px; border-radius:8px; border:2px solid var(--rule); background:var(--card); color:var(--ink); cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:5px; transition:border-color .12s, transform .08s; min-height:64px;}
   .verdict-btn:active{transform:scale(0.98);}
   .verdict-btn:hover, .verdict-btn:focus-visible{border-color:var(--ink);}
@@ -169,6 +188,7 @@
 
   var POLL_MS = 1500;          // lobby / play poll cadence (engine adds jitter)
   var PROGRESS_FLUSH_MS = 5000; // coalesce live-score writes to protect the backend
+  var LOBBY_HEARTBEAT_MS = 10000;
 
   /* ---------------------------------------------------------------
      CONTENT BANK
@@ -300,6 +320,7 @@
   ----------------------------------------------------------------*/
   function render(){
     var app = document.getElementById("app");
+    document.body.classList.toggle("play-active", state.screen === "play");
     if (state.screen === "register") app.innerHTML = viewRegister();
     else if (state.screen === "briefing") app.innerHTML = viewBriefing();
     else if (state.screen === "lobby") app.innerHTML = viewLobby();
@@ -308,6 +329,7 @@
     else if (state.screen === "results") app.innerHTML = viewResults();
     else if (state.screen === "leaderboard") app.innerHTML = viewLeaderboard();
     bind();
+    syncLobbyPresence();
   }
 
   function masthead(kicker){
@@ -393,6 +415,7 @@
   ----------------------------------------------------------------*/
   function enterRound(game){
     if (!game || game.round === state.joinedRound) return;
+    stopLobbyPresence();
     // Already played at least one round this session (a restart, or the
     // normal next-round handoff) → always show the countdown, don't risk
     // the "late joiner" path just because a poll happened to land late.
@@ -469,23 +492,31 @@
       ? '<div class="late-note">Joined mid-shift &mdash; you have the '+mmss(state.joinedSeconds)+' left on the room clock.</div>'
       : '';
     return '' +
-      '<div class="hud">' +
-        '<div class="hud-block">Score<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div>' +
-        '<div class="hud-block">Streak<span class="hud-num mono" id="streakNum">'+state.streak+'</span></div>' +
-        '<div class="hud-block">Time Left<span class="hud-num mono" id="secLeft">'+mmss(state.secondsLeft)+'</span></div>' +
-      '</div>' +
-      '<div class="timerbar"><div class="timerfill" id="timerFill" style="width:'+pct+'%; background:'+barColor+';"></div></div>' +
-      lateNote +
-      '<div class="postcard" id="postcard">' +
-        '<div class="post-head"><div class="avatar">'+esc(initials)+'</div>' +
-          '<div class="post-who"><div class="post-handle">'+esc(card.handle)+'</div><div class="post-meta">'+esc(card.time)+' ago</div></div>' +
-          '<div class="post-tag">'+esc(card.tag)+'</div></div>' +
-        '<div class="post-body">'+card.body+'</div>' +
-        '<div class="post-foot"><span>&#128172; Replies</span><span>&#8635; Reposts</span><span>&#9825; Likes</span></div>' +
-        '<div class="stamp-overlay" id="stampOverlay"><div class="stamp" id="stampEl"></div></div>' +
-      '</div>' +
-      '<div class="explain" id="explainBox"></div>' +
-      '<div class="verdicts" id="verdictGrid">'+btns+'</div>';
+      '<div class="play-shell">' +
+        '<div class="play-header">' +
+          '<div class="hud">' +
+            '<div class="hud-block">Score<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div>' +
+            '<div class="hud-block">Streak<span class="hud-num mono" id="streakNum">'+state.streak+'</span></div>' +
+            '<div class="hud-block">Time Left<span class="hud-num mono" id="secLeft">'+mmss(state.secondsLeft)+'</span></div>' +
+          '</div>' +
+          '<div class="timerbar"><div class="timerfill" id="timerFill" style="width:'+pct+'%; background:'+barColor+';"></div></div>' +
+        '</div>' +
+        '<div class="play-main">' +
+          lateNote +
+          '<div class="postcard" id="postcard">' +
+            '<div class="post-head"><div class="avatar">'+esc(initials)+'</div>' +
+              '<div class="post-who"><div class="post-handle">'+esc(card.handle)+'</div><div class="post-meta">'+esc(card.time)+' ago</div></div>' +
+              '<div class="post-tag">'+esc(card.tag)+'</div></div>' +
+            '<div class="post-body">'+card.body+'</div>' +
+            '<div class="post-foot"><span>&#128172; Replies</span><span>&#8635; Reposts</span><span>&#9825; Likes</span></div>' +
+            '<div class="stamp-overlay" id="stampOverlay"><div class="stamp" id="stampEl"></div></div>' +
+          '</div>' +
+          '<div class="verdicts" id="verdictGrid">'+btns+'</div>' +
+        '</div>' +
+        '<div class="play-feedback">' +
+          '<div class="explain placeholder" id="explainBox">Feedback will appear here after you respond.</div>' +
+        '</div>' +
+      '</div>';
   }
 
   function handleAnswer(cat){
@@ -509,6 +540,7 @@
     overlay.classList.add("show");
     var box = document.getElementById("explainBox");
     box.innerHTML = '<b>'+esc(CATS[card.cat].label)+':</b> '+card.why;
+    box.classList.remove("placeholder");
     box.classList.add("show");
     pushPlayerProgress();
     clearTimeout(state.answerTimer);
@@ -538,7 +570,7 @@
   /* ---------------------------------------------------------------
      PROGRESS WRITES — coalesced. A full class answering every few
      seconds was previously firing a write per answer, each one taking
-     a script lock. Batching to one write per 5s keeps the host's 15s
+     a script lock. Batching to one write per 5s keeps the host's 5s
      scoreboard just as fresh for a fraction of the backend load.
   ----------------------------------------------------------------*/
   var progTimer = null, progDirty = false;
@@ -560,6 +592,44 @@
       score: state.score, streak: state.streak, bestStreak: state.bestStreak,
       correct: state.correct, attempted: state.attempted
     });
+  }
+
+  var lobbyPresenceTimer = null, lobbyPresenceCode = "";
+
+  function shouldSendLobbyPresence(){
+    if (state.screen !== "lobby" || !state.gameCode || !Engine.identity.isLoggedIn()) return false;
+    var phase = Engine.session.derivePhase(state.game);
+    return phase === "idle" || phase === "ended";
+  }
+
+  function sendLobbyPresence(){
+    if (!shouldSendLobbyPresence()) return;
+    lobbyPresenceCode = state.gameCode;
+    Engine.players.pushWaitingPresence({
+      code: state.gameCode,
+      studentId: Engine.identity.studentId,
+      displayName: Engine.identity.displayName,
+      period: Engine.identity.period
+    });
+  }
+
+  function stopLobbyPresence(){
+    if (lobbyPresenceTimer){
+      clearInterval(lobbyPresenceTimer);
+      lobbyPresenceTimer = null;
+    }
+    lobbyPresenceCode = "";
+  }
+
+  function syncLobbyPresence(){
+    if (!shouldSendLobbyPresence()){
+      stopLobbyPresence();
+      return;
+    }
+    if (lobbyPresenceTimer && lobbyPresenceCode === state.gameCode) return;
+    stopLobbyPresence();
+    sendLobbyPresence();
+    lobbyPresenceTimer = setInterval(sendLobbyPresence, LOBBY_HEARTBEAT_MS);
   }
 
   /* ---------------------------------------------------------------
@@ -659,6 +729,7 @@
     if ((el = document.getElementById("toLbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; render(); });
     if ((el = document.getElementById("switchCodeBtn"))) el.addEventListener("click", function(){
       Engine.session.stopPolling();
+      stopLobbyPresence();
       forgetCode();
       state.joinError = "";
       state.screen = "register"; render();
@@ -681,6 +752,7 @@
       meta = meta || {};
 
       if (!game && (state.screen==="lobby" || state.screen==="briefing")){
+        stopLobbyPresence();
         forgetCode();
         state.joinError = meta.retired
           ? "Your teacher started a new game — enter the new code."
