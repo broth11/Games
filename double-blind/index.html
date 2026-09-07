@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Double Blind — Peer Review Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,900&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1ECE1; --card:#FBF8F1; --card-2:#EAE2D2; --ink:#211D18; --ink-soft:#6B6154;
+    --rule:#D9CFBB; --focus:#345170;
+    --accept:#3D6B4F; --accept-ink:#E9F1EC;
+    --revise:#B8863B; --revise-ink:#F7EEDD;
+    --reject:#8C2F2F; --reject-ink:#F8E9E7;
+    --shadow: 0 1px 0 rgba(33,29,24,0.05), 0 10px 24px -16px rgba(33,29,24,0.35);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#1B1815; --card:#242019; --card-2:#2D2820; --ink:#EFE9DD; --ink-soft:#A89C86;
+      --rule:#463F31; --focus:#7FA6C9;
+      --accept:#5EA37B; --accept-ink:#16241C;
+      --revise:#D9A24E; --revise-ink:#2B2213;
+      --reject:#D97C6E; --reject-ink:#2B1815;
+      --shadow: 0 1px 0 rgba(0,0,0,0.4), 0 14px 28px -16px rgba(0,0,0,0.6);
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background: var(--paper); color:var(--ink);
+    font-family:"Inter",-apple-system,system-ui,sans-serif; -webkit-font-smoothing:antialiased;
+  }
+  .serif{font-family:"Fraunces",Georgia,serif;}
+  .mono{font-family:"Space Mono","SF Mono",monospace;}
+  a{color:inherit;} button{font-family:inherit;}
+  :focus-visible{outline:3px solid var(--focus); outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
+
+  .wrap{max-width:960px; margin:0 auto; padding:16px 18px; height:100vh; display:flex; flex-direction:column;}
+
+  .topbar{display:flex; align-items:baseline; justify-content:space-between; gap:12px; border-bottom:2px solid var(--ink); padding-bottom:10px; flex:none;}
+  .brand{display:flex; flex-direction:column; gap:2px;}
+  .brand .name{font-family:"Fraunces",serif; font-weight:700; font-size:20px; letter-spacing:0.01em;}
+  .brand .sub{font-size:11.5px; color:var(--ink-soft);}
+  .meta{display:flex; gap:16px; font-size:13px;}
+  .meta div{text-align:right;}
+  .meta .n{font-family:"Space Mono",monospace; font-weight:700; font-size:16px; display:block;}
+  .meta .l{color:var(--ink-soft); font-size:10.5px;}
+
+  .progress-dots{display:flex; gap:6px; margin:10px 0 12px; flex:none;}
+  .dot{width:100%; height:5px; border-radius:3px; background:var(--card-2);}
+  .dot.done{background:var(--ink-soft);}
+  .dot.current{background:var(--ink);}
+
+  #app{flex:1 1 auto; min-height:0; display:flex;}
+  .folder{flex:1; display:flex; flex-direction:column; min-height:0; background:var(--card); border:1px solid var(--rule); border-radius:4px; box-shadow:var(--shadow); padding:16px 18px; overflow:hidden;}
+
+  .folder-head{flex:none; margin-bottom:10px;}
+  .kind-tag{display:inline-flex; align-items:center; gap:6px; font-family:"Space Mono",monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding:3px 9px; border-radius:20px; border:1px solid var(--rule); color:var(--ink-soft); margin-bottom:6px;}
+  .kind-tag.build{border-color:#8a9a7f;}
+  .kind-tag.showdown{border-color:#a68a6b;}
+  h2.title{font-family:"Fraunces",serif; font-weight:600; font-size:18px; margin:0; line-height:1.25;}
+  p.subquestion{font-size:14px; color:var(--ink-soft); margin:4px 0 0; line-height:1.4;}
+
+  .split{flex:1; min-height:0; display:grid; grid-template-columns:0.85fr 1.15fr; gap:14px;}
+  .pane{min-height:0; overflow-y:auto; border:1px solid var(--rule); border-radius:4px; padding:14px 16px; background:var(--card-2); display:flex; flex-direction:column;}
+  .pane-label{flex:none; font-family:"Space Mono",monospace; font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px;}
+
+  /* ---- Build mode ---- */
+  p.scenario{font-size:14.5px; line-height:1.6; color:var(--ink); margin:0;}
+
+  .field-grid{display:flex; flex-direction:column; gap:7px; flex:none;}
+  .field-row{display:grid; grid-template-columns:128px 1fr; gap:8px; align-items:center;}
+  .field-row .field-id{font-family:"Inter",sans-serif; font-size:11.5px; font-weight:600; line-height:1.25; color:var(--ink-soft);}
+  select{width:100%; padding:8px 9px; border-radius:3px; border:1.5px solid var(--rule); background:var(--card); color:var(--ink); font-size:13px; font-family:"Inter",sans-serif;}
+  select:focus{border-color:var(--focus);}
+
+  .status-row{flex:none; display:flex; justify-content:space-between; gap:10px; font-size:11.5px; margin-top:8px; min-height:15px;}
+  .attempt-note{color:var(--ink-soft);}
+  .lockout-note{font-family:"Space Mono",monospace; color:var(--revise); text-align:right;}
+
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 18px; border-radius:3px; border:none; cursor:pointer; font-weight:600; font-size:14px; background:var(--ink); color:var(--paper); transition:transform .08s ease, opacity .15s; flex:none;}
+  .btn:active{transform:scale(0.98);} .btn:disabled{opacity:.4; cursor:not-allowed;}
+  .btn-wide{width:100%; margin-top:10px;}
+  .btn-quiet{background:transparent; color:var(--ink); border:1.5px solid var(--rule);}
+
+  .verdict{flex:none; margin-top:8px; padding:10px 12px; border-radius:4px; display:flex; align-items:center; gap:10px;}
+  .verdict.good{background:var(--accept-ink); color:var(--accept);}
+  .verdict.mid{background:var(--revise-ink); color:var(--revise);}
+  .verdict.bad{background:var(--reject-ink); color:var(--reject);}
+  .verdict .stamp-word{font-family:"Fraunces",serif; font-weight:900; font-size:15px; text-transform:uppercase; transform:rotate(-3deg); flex:none;}
+  .verdict .detail{font-size:12.5px; line-height:1.4;}
+  .points-earned{font-family:"Space Mono",monospace; font-size:11.5px; margin-top:4px; display:block;}
+
+  /* ---- Showdown mode ---- */
+  .ms-card{border:1.5px solid var(--rule); border-radius:4px; padding:12px 14px; background:var(--card); display:flex; flex-direction:column; gap:8px; position:relative; margin-bottom:12px;}
+  .ms-card:last-of-type{margin-bottom:0;}
+  .ms-card.picked-good{border-color:var(--accept);}
+  .ms-card.picked-bad{border-color:var(--reject);}
+  .ms-label{font-family:"Space Mono",monospace; font-size:10.5px; letter-spacing:.08em; color:var(--ink-soft);}
+  .ms-text{font-size:13.5px; line-height:1.5; margin:0;}
+  .ms-stamp{position:absolute; top:9px; right:9px; font-family:"Fraunces",serif; font-weight:900; font-size:10.5px; text-transform:uppercase; padding:3px 8px; border-radius:20px; transform:rotate(-4deg);}
+  .ms-stamp.good{background:var(--accept-ink); color:var(--accept);}
+  .ms-stamp.bad{background:var(--reject-ink); color:var(--reject);}
+
+  .reason-placeholder{flex:1; display:flex; align-items:center; justify-content:center; text-align:center; font-size:13px; color:var(--ink-soft); padding:20px 10px;}
+  .reason-q{font-size:13.5px; margin:0 0 10px; font-weight:600; flex:none;}
+  .reason-opt{display:block; width:100%; text-align:left; padding:9px 11px; border-radius:4px; border:1.5px solid var(--rule); background:var(--card); color:var(--ink); font-size:12.5px; line-height:1.4; cursor:pointer; margin-bottom:6px; transition:border-color .12s; flex:none;}
+  .reason-opt:disabled{cursor:default;}
+  .reason-opt.correct{border-color:var(--accept); background:var(--accept-ink);}
+  .reason-opt.incorrect{border-color:var(--reject); background:var(--reject-ink);}
+
+  .explain-box{flex:none; margin-top:8px; padding:10px 12px; background:var(--card); border-radius:4px; font-size:12px; line-height:1.5; color:var(--ink-soft);}
+  .explain-box b{color:var(--ink);}
+
+  .summary{margin:auto; text-align:center; padding:20px;}
+  .summary .big{font-family:"Fraunces",serif; font-weight:900; font-size:52px; color:var(--accept); line-height:1;}
+  .summary .cap{font-size:13px; color:var(--ink-soft); margin-top:6px;}
+  .stat-row{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin:20px 0;}
+  .stat-tile{background:var(--card-2); border:1px solid var(--rule); border-radius:5px; padding:12px 8px;}
+  .stat-tile .n{font-family:"Space Mono",monospace; font-weight:700; font-size:20px; display:block;}
+  .stat-tile .l{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em;}
+  .gate{position:fixed; inset:0; z-index:20; overflow:auto; background:var(--paper); padding:24px 18px;}
+  .gate-card{max-width:620px; margin:5vh auto; background:var(--card); border:1px solid var(--rule); border-radius:6px; box-shadow:var(--shadow); padding:24px;}
+  .gate h1{font-family:"Fraunces",serif; font-size:42px; margin:4px 0; color:var(--accept);}
+  .gate label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin:14px 0 5px;}
+  .gate input{width:100%; padding:12px; border:1.5px solid var(--rule); border-radius:3px; background:var(--card-2); color:var(--ink);}
+  .code-input{text-transform:uppercase; text-align:center; letter-spacing:.3em; font-family:"Space Mono",monospace; font-size:21px;}
+  .gate-error{min-height:20px; color:var(--reject); font-size:13px; margin-top:8px;}
+  .gate-note{text-align:center; color:var(--ink-soft); font-size:13px;}
+  .timer-meta{min-width:74px;}
+  .credit{position:fixed; z-index:30; left:8px; right:8px; bottom:2px; text-align:center; color:var(--ink-soft); font-size:9.5px; line-height:1.35; margin:0 auto; max-width:920px; background:color-mix(in srgb,var(--paper) 92%,transparent);}
+  .mask{position:fixed; inset:0; z-index:80; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; background:#12100E; color:#F6F1E4; animation:maskIn .25s ease-out;}
+  @keyframes maskIn{from{opacity:0}to{opacity:1}}
+  .mask-kicker{font-family:"Space Mono",monospace; font-size:13px; letter-spacing:.2em; text-transform:uppercase; opacity:.7;}
+  .mask-num{font-family:"Fraunces",serif; font-weight:900; font-size:clamp(110px,34vw,240px); line-height:1; color:#5EA37B;}
+  .mask-num.pop{animation:countPop .55s cubic-bezier(.2,.8,.3,1);}
+  @keyframes countPop{0%{transform:scale(1.7);opacity:0}45%,100%{transform:scale(1);opacity:1}}
+  .mask-sub{font-family:"Space Mono",monospace; font-size:13px; opacity:.55; max-width:320px; text-align:center;}
+
+  @media (max-width:720px){
+    .wrap{height:auto; min-height:100vh;}
+    #app{min-height:auto;}
+    .folder{overflow:visible;}
+    .split{grid-template-columns:1fr; overflow:visible;}
+    .pane{overflow-y:visible;}
+  }
+</style>
+</head>
+<body>
+<div id="gate" class="gate"></div>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <span class="name">Double Blind</span>
+      <span class="sub">Peer Review Desk · live review</span>
+    </div>
+    <div class="meta">
+      <div><span class="n mono" id="scoreNum">0</span><span class="l">score</span></div>
+      <div><span class="n mono" id="streakNum">0</span><span class="l">streak</span></div>
+      <div class="timer-meta"><span class="n mono" id="timeNum">0:00</span><span class="l">time left</span></div>
+    </div>
+  </div>
+  <div class="progress-dots" id="dots"></div>
+  <div id="app"></div>
+</div>
+<!-- TODO resolved: the direct OpenGameArt listing URL was independently confirmed before release. -->
+<p class="credit">Music: &ldquo;Free Jump&rdquo; by <a href="https://opengameart.org/users/tad" target="_blank" rel="noopener">TAD</a>, from the <a href="https://opengameart.org/content/8-bit-pack-2" target="_blank" rel="noopener"><em>8-bit Pack 2</em></a> collection on OpenGameArt.org &mdash; licensed <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.</p>
+<script src="../engine.js"></script>
+<script>
+(function(){
+"use strict";
+
+Engine.configure({
+  appsScriptUrl:"https://script.google.com/macros/s/AKfycbwdGJAOLH5JskqJTckVxZuOGcu-nBAEj0DXe5M2tKcWHby4ZfVRM_1-IL11WA_g0iIr7Q/exec",
+  gameType:"double-blind"
+});
+
+var CARDS = [
+  {
+    kind:"build", tier:1,
+    title:"Manuscript #114 — Timer & Task Completion",
+    scenario:"Anjali wants to know whether a visible timer changes how long it takes someone to finish a small crossword. She recruits 44 volunteers and randomly splits them into two equal groups. One group solves the puzzle in a room with a timer on every desk; the other solves it in an identical room with no timer. Every volunteer gets the same puzzle at the same time of day. She records each person's solving time and compares the two group averages.",
+    fields:[
+      {id:"UNIT", label:"Experimental Units", options:["44 student volunteers","The two rooms","The crossword puzzle itself","Anjali and her research assistant"], correctText:"44 student volunteers"},
+      {id:"IV", label:"Explanatory Variable", options:["Visibility of a timer","Time of day","Room temperature","Puzzle difficulty"], correctText:"Visibility of a timer"},
+      {id:"TX", label:"Treatments", options:["Timer on the desk / No timer on the desk","Morning session / Evening session","Easy puzzle / Hard puzzle","Group A / Group B (no other difference)"], correctText:"Timer on the desk / No timer on the desk"},
+      {id:"DV", label:"Response Variable", options:["Time needed to complete the puzzle","Number of volunteers recruited","Room temperature","Whether the timer was visible"], correctText:"Time needed to complete the puzzle"},
+      {id:"DESIGN", label:"Design Type", options:["Completely Randomized Design","Randomized Block Design","Matched Pairs Design","Observational study (no design needed)"], correctText:"Completely Randomized Design"},
+      {id:"BLOCK", label:"Blocking Variable", options:["N/A — no blocking variable used","Solving speed","Puzzle difficulty","Room temperature"], correctText:"N/A — no blocking variable used"}
+    ]
+  },
+  {
+    kind:"showdown", tier:2,
+    title:"Case File #22 — Social Media & Anxiety",
+    question:"Both designs randomly assign treatment. Which is more likely to reveal a real anxiety-reducing effect, if one exists?",
+    weakerText:"230 student volunteers are split into two groups completely at random. One group limits social media to 30 minutes a day; the other uses it as normal. After two weeks, anxiety scores are compared between the two groups.",
+    strongerText:"The same 230 volunteers are first sorted into two groups — female and not female — since female students tend to start with higher baseline anxiety. Within each group, students are randomly assigned to the 30-minute limit or normal use. Anxiety scores are compared within each group, then combined.",
+    reasonOptions:[
+      "Groups students by a variable related to the response before randomizing, which reduces variability within each comparison.",
+      "Recruited more participants than the other design.",
+      "Used a placebo group.",
+      "All of the above"
+    ],
+    correctReasonText:"Groups students by a variable related to the response before randomizing, which reduces variability within each comparison.",
+    explanation:"The stronger submission uses a randomized block design: blocking by gender first removes the baseline anxiety gap between blocks, so the treatment comparison within each block isn't muddied by it. Both designs actually used the same 230 volunteers, and neither used a placebo."
+  },
+  {
+    kind:"build", tier:2,
+    title:"Manuscript #219 — Jen/John Application Study",
+    scenario:"Experimenters print identical fake job applications for a lab-manager position, differing only in the name at the top: \u201cJennifer\u201d on half, \u201cJohn\u201d on the rest. 127 science faculty members are randomly sent one version each \u2014 63 get \u201cJohn,\u201d 64 get \u201cJennifer.\u201d Each faculty member rates the applicant\u2019s competence, \u201chireability,\u201d and starting salary, and the two groups\u2019 ratings are compared.",
+    fields:[
+      {id:"UNIT", label:"Experimental Units", options:["127 science faculty members","The two job applications","63 male job candidates","The hiring committee"], correctText:"127 science faculty members"},
+      {id:"IV", label:"Explanatory Variable", options:["Gender implied by the applicant's name","Faculty member's own gender","Applicant's actual qualifications","Department budget"], correctText:"Gender implied by the applicant's name"},
+      {id:"TX", label:"Treatments", options:["\u201cJennifer\u201d application / \u201cJohn\u201d application","Competence rating / Hireability rating","High salary offer / Low salary offer","Randomly assigned / Not randomly assigned"], correctText:"\u201cJennifer\u201d application / \u201cJohn\u201d application"},
+      {id:"DV", label:"Response Variable", options:["Competence, hireability, and salary ratings","Number of applications sent","Which name was used","Faculty members' years of experience"], correctText:"Competence, hireability, and salary ratings"},
+      {id:"DESIGN", label:"Design Type", options:["Completely Randomized Design","Randomized Block Design","Matched Pairs Design","Observational study (no design needed)"], correctText:"Completely Randomized Design"},
+      {id:"BLOCK", label:"Blocking Variable", options:["N/A — no blocking variable used","Faculty member's department","Applicant's college GPA","Time of year applications were sent"], correctText:"N/A — no blocking variable used"}
+    ]
+  },
+  {
+    kind:"showdown", tier:3,
+    title:"Case File #31 — The Pottery Wheel",
+    question:"Both designs compare the same potter under both wheel directions. Which comparison is trustworthy?",
+    weakerText:"Jordan has each potter throw two identical cylinders \u2014 the first on a clockwise wheel, the second on a counterclockwise wheel \u2014 and times both. Every potter does clockwise first.",
+    strongerText:"Jordan has each potter throw two identical cylinders, one on each wheel direction, but flips a coin for each potter to decide which direction they use first.",
+    reasonOptions:[
+      "Randomizing the order means practice effects are spread evenly across both wheel directions instead of always favoring one.",
+      "Used a larger sample of potters.",
+      "Measured a categorical response instead of time.",
+      "All of the above"
+    ],
+    correctReasonText:"Randomizing the order means practice effects are spread evenly across both wheel directions instead of always favoring one.",
+    explanation:"This is a matched-pairs design either way, but only the stronger submission randomizes which treatment each potter gets first. In the weaker submission, every potter is more practiced on their second cylinder \u2014 always the counterclockwise one \u2014 so the wheel direction is confounded with practice."
+  },
+  {
+    kind:"build", tier:2,
+    title:"Manuscript #308 — Darius's Commute",
+    scenario:"Darius wants to know which of three routes to work is fastest on average. Over his next 30 commuting days, he randomly assigns one of the three routes to each day, so each route ends up used exactly 10 times. He leaves at the same time every day and records each day's commute time.",
+    fields:[
+      {id:"UNIT", label:"Experimental Units", options:["30 commuting days","3 different routes","Darius himself","10 repeated trials"], correctText:"30 commuting days"},
+      {id:"IV", label:"Explanatory Variable", options:["Which route is driven","Time Darius leaves for work","Day of the week","Weather conditions"], correctText:"Which route is driven"},
+      {id:"TX", label:"Treatments", options:["Route 1 / Route 2 / Route 3","Morning / Afternoon","Fast / Slow","Random / Nonrandom"], correctText:"Route 1 / Route 2 / Route 3"},
+      {id:"DV", label:"Response Variable", options:["Commute time","Number of days recorded","Which route was assigned","Traffic level"], correctText:"Commute time"},
+      {id:"DESIGN", label:"Design Type", options:["Completely Randomized Design","Randomized Block Design","Matched Pairs Design","Observational study (no design needed)"], correctText:"Completely Randomized Design"},
+      {id:"BLOCK", label:"Blocking Variable", options:["N/A — no blocking variable used","Day of the week","Weather","Route length"], correctText:"N/A — no blocking variable used"}
+    ]
+  },
+  {
+    kind:"showdown", tier:3,
+    title:"Case File #40 — The Vaccine Trial",
+    question:"Which manuscript supports the claim that the vaccine caused a reduction in Covid-19 severity?",
+    weakerText:"Researchers compare Covid-19 death rates between people who chose to get vaccinated and people who didn't, using existing health records.",
+    strongerText:"30,420 adult volunteers are randomly assigned to receive either the vaccine or a placebo shot, and neither the participants nor the staff administering doses know which one anyone received. Illness rates are compared between the two groups.",
+    reasonOptions:[
+      "Random assignment balances confounding variables like health-consciousness between the two groups.",
+      "The placebo control isolates the vaccine's real effect from any placebo effect.",
+      "Double-blinding prevents staff from favoring one group when recording illness.",
+      "All of the above"
+    ],
+    correctReasonText:"All of the above",
+    explanation:"The weaker submission is purely observational \u2014 no conditions were imposed, so confounders (like who tends to seek out vaccination) can't be ruled out. The stronger submission is a well-designed experiment: random assignment, a placebo control, and double-blinding are all doing real work here, which is why \u201call of the above\u201d is genuinely the answer this time."
+  }
+];
+
+var TIER_POINTS = {1:10, 2:15, 3:20};
+var ATTEMPT_MULT = [1, 0.65, 0.40, 0.20, 0.10];
+var LOCKOUT_MS = 3000;
+var POLL_MS = 1500, PROGRESS_FLUSH_MS = 5000, LOBBY_HEARTBEAT_MS = 10000;
+
+function shuffle(arr){ var a=arr.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)),t=a[i];a[i]=a[j];a[j]=t; } return a; }
+function instantiate(card){
+  var copy=Object.assign({},card);
+  if(card.kind==="build") copy.fields=card.fields.map(function(f){ return Object.assign({},f,{options:shuffle(f.options)}); });
+  else {
+    var strongerAtA=Math.random()<0.5;
+    copy.manuscripts={A:strongerAtA?card.strongerText:card.weakerText,B:strongerAtA?card.weakerText:card.strongerText};
+    copy.correctPick=strongerAtA?"A":"B";
+    copy.reasonOptions=shuffle(card.reasonOptions);
+    copy.correctReason=copy.reasonOptions.indexOf(card.correctReasonText);
+  }
+  return copy;
+}
+function buildDeck(){
+  var deck=[];
+  [1,2,3].forEach(function(tier){
+    var builds=shuffle(CARDS.filter(function(c){return c.tier===tier&&c.kind==="build";}));
+    var shows=shuffle(CARDS.filter(function(c){return c.tier===tier&&c.kind==="showdown";}));
+    for(var i=0;i<Math.max(builds.length,shows.length);i++){
+      if(builds[i]) deck.push(instantiate(builds[i]));
+      if(shows[i]) deck.push(instantiate(shows[i]));
+    }
+  });
+  return deck;
+}
+function randomizationSelfTest(){
+  var build=CARDS.filter(function(c){return c.kind==="build";})[0];
+  var show=CARDS.filter(function(c){return c.kind==="showdown";})[0];
+  var dropdown=[0,0,0,0],reason=[0,0,0,0],slot={A:0,B:0};
+  for(var i=0;i<50;i++){
+    var b=instantiate(build),s=instantiate(show);
+    dropdown[b.fields[0].options.indexOf(b.fields[0].correctText)]++;
+    reason[s.reasonOptions.indexOf(s.correctReasonText)]++;
+    slot[s.correctPick]++;
+  }
+  var pass=dropdown.filter(Boolean).length>1&&reason.filter(Boolean).length>1&&slot.A>10&&slot.B>10;
+  console[pass?"info":"error"]("Double Blind randomization self-test",{pass:pass,dropdown:dropdown,reason:reason,strongerSlot:slot});
+  return {pass:pass,dropdown:dropdown,reason:reason,strongerSlot:slot};
+}
+window.DoubleBlindDev={selfTest:randomizationSelfTest,buildDeck:buildDeck};
+
+var state = {
+  idx: 0,
+  score: 0,
+  streak: 0,
+  bestStreak: 0,
+  resolvedCount: 0,
+  correctCount: 0,
+  attempt: 1,
+  locked: false,
+  resolved: false,
+  showdownPick: null,
+  showdownReasonAnswered: false,
+  deck:[], screen:"register", gameCode:"", game:null, joinError:"", joinedRound:-1,
+  announcedEndsAt:0, localCountdownEnd:0, localPlayEnd:0, joinedLate:false, joinedSeconds:0,
+  secondsLeft:0, timerId:null, countdownHandle:null, lockTimer:null
+};
+
+function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+function renderDots(){
+  var html = state.deck.slice(0,CARDS.length).map(function(c, i){
+    var cls = (state.idx%CARDS.length)>i ? "done" : ((state.idx%CARDS.length)===i ? "current" : "");
+    return '<div class="dot ' + cls + '"></div>';
+  }).join("");
+  document.getElementById("dots").innerHTML = html;
+}
+
+function renderMeta(){
+  document.getElementById("scoreNum").textContent = state.score;
+  document.getElementById("streakNum").textContent = state.streak;
+}
+
+function resetCardState(){
+  state.attempt = 1;
+  state.locked = false;
+  state.resolved = false;
+  state.showdownPick = null;
+  state.showdownReasonAnswered = false;
+}
+
+function render(){
+  renderDots();
+  renderMeta();
+  if(!state.deck.length) return;
+  if (state.idx >= state.deck.length) state.deck=state.deck.concat(buildDeck());
+  var card = state.deck[state.idx];
+  if (card.kind === "build") renderBuild(card);
+  else renderShowdown(card);
+}
+
+/* ---------------- BUILD MODE ---------------- */
+
+function renderBuild(card){
+  var fieldsHtml = card.fields.map(function(f, fi){
+    var opts = f.options.map(function(o, oi){
+      return '<option value="' + oi + '">' + esc(o) + '</option>';
+    }).join("");
+    return '<div class="field-row">' +
+      '<span class="field-id">' + esc(f.label) + '</span>' +
+      '<select data-field="' + fi + '" ' + (state.resolved ? "disabled" : "") + '>' +
+        '<option value="" disabled selected>\u2014 choose \u2014</option>' + opts +
+      '</select></div>';
+  }).join("");
+
+  var app = document.getElementById("app");
+  app.innerHTML =
+    '<div class="folder">' +
+      '<div class="folder-head">' +
+        '<span class="kind-tag build mono">Build \u00b7 Complete the Methodology</span>' +
+        '<h2 class="title">' + esc(card.title) + '</h2>' +
+      '</div>' +
+      '<div class="split">' +
+        '<div class="pane"><span class="pane-label">The Manuscript</span><p class="scenario">' + esc(card.scenario) + '</p></div>' +
+        '<div class="pane">' +
+          '<span class="pane-label">Review Form</span>' +
+          '<div class="field-grid">' + fieldsHtml + '</div>' +
+          '<div class="status-row"><span class="attempt-note" id="attemptNote"></span><span class="lockout-note mono" id="lockoutNote"></span></div>' +
+          '<div id="verdictSlot"></div>' +
+          '<button class="btn btn-wide" id="submitBtn">Submit</button>' +
+          '<button class="btn btn-quiet btn-wide" id="nextBtn" style="display:none;">Next Manuscript \u2192</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  updateAttemptNote();
+  bindBuild(card);
+  updateSubmitEnabled(card);
+}
+
+function updateAttemptNote(){
+  var el = document.getElementById("attemptNote");
+  if (!el || state.resolved) { if (el) el.textContent = ""; return; }
+  var pct = Math.round(ATTEMPT_MULT[Math.min(state.attempt - 1, ATTEMPT_MULT.length - 1)] * 100);
+  el.textContent = "Attempt #" + state.attempt + " \u2014 " + pct + "% credit if correct";
+}
+
+function allFieldsChosen(card){
+  var selects = document.querySelectorAll('select[data-field]');
+  for (var i = 0; i < selects.length; i++){
+    if (selects[i].value === "") return false;
+  }
+  return selects.length === card.fields.length;
+}
+
+function updateSubmitEnabled(card){
+  var btn = document.getElementById("submitBtn");
+  if (!btn) return;
+  btn.disabled = state.locked || state.resolved || !allFieldsChosen(card);
+}
+
+function bindBuild(card){
+  Array.prototype.forEach.call(document.querySelectorAll('select[data-field]'), function(sel){
+    sel.addEventListener("change", function(){ updateSubmitEnabled(card); });
+  });
+  document.getElementById("submitBtn").addEventListener("click", function(){ submitBuild(card); });
+  var nb = document.getElementById("nextBtn");
+  if (nb) nb.addEventListener("click", nextCard);
+}
+
+function submitBuild(card){
+  var selects = document.querySelectorAll('select[data-field]');
+  var wrong = 0;
+  selects.forEach(function(sel, i){
+    var selectedText = card.fields[i].options[parseInt(sel.value, 10)];
+    if (selectedText !== card.fields[i].correctText) wrong++;
+  });
+
+  var slot = document.getElementById("verdictSlot");
+  var n = card.fields.length;
+
+  if (wrong === 0){
+    var pct = ATTEMPT_MULT[Math.min(state.attempt - 1, ATTEMPT_MULT.length - 1)];
+    var pts = TIER_POINTS[card.tier] * pct;
+    state.score += pts;
+    state.resolvedCount++;
+    state.correctCount++;
+    if (state.attempt === 1){
+      state.streak++;
+      state.bestStreak = Math.max(state.bestStreak, state.streak);
+    } else {
+      state.streak = 0;
+    }
+    state.resolved = true;
+    slot.innerHTML = '<div class="verdict good"><span class="stamp-word">Accepted</span>' +
+      '<span class="detail">All ' + n + ' fields correct on attempt ' + state.attempt + '.<span class="points-earned mono">+' + pts + ' pts</span></span></div>';
+    document.getElementById("submitBtn").style.display = "none";
+    document.getElementById("nextBtn").style.display = "block";
+    renderMeta();
+    pushPlayerProgress();
+  } else {
+    slot.innerHTML = '<div class="verdict mid"><span class="stamp-word">Revise</span>' +
+      '<span class="detail">' + wrong + ' of ' + n + ' fields need revision. Adjust and resubmit once the lockout clears.</span></div>';
+    state.attempt++;
+    lockSubmit(card);
+    updateAttemptNote();
+  }
+}
+
+function lockSubmit(card){
+  state.locked = true;
+  updateSubmitEnabled(card);
+  var until = Date.now() + LOCKOUT_MS;
+  var note = document.getElementById("lockoutNote");
+  clearInterval(state.lockTimer);
+  state.lockTimer = setInterval(function(){
+    var remaining = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    if (note) note.textContent = remaining > 0 ? "Locked \u2014 " + remaining + "s" : "";
+    if (remaining <= 0){
+      clearInterval(state.lockTimer); state.lockTimer = null;
+      state.locked = false;
+      updateSubmitEnabled(card);
+    }
+  }, 200);
+}
+
+/* ---------------- SHOWDOWN MODE ---------------- */
+
+function renderShowdown(card){
+  var app = document.getElementById("app");
+  app.innerHTML =
+    '<div class="folder">' +
+      '<div class="folder-head">' +
+        '<span class="kind-tag showdown mono">Showdown \u00b7 Compare Submissions</span>' +
+        '<h2 class="title">' + esc(card.title) + '</h2>' +
+        '<p class="subquestion">' + esc(card.question) + '</p>' +
+      '</div>' +
+      '<div class="split">' +
+        '<div class="pane">' +
+          '<span class="pane-label">The Submissions</span>' +
+          '<div class="ms-card" id="msA"><span class="ms-label mono">Manuscript A</span><p class="ms-text">' + esc(card.manuscripts.A) + '</p>' +
+            '<button class="btn" data-pick="A">Pick This One</button></div>' +
+          '<div class="ms-card" id="msB"><span class="ms-label mono">Manuscript B</span><p class="ms-text">' + esc(card.manuscripts.B) + '</p>' +
+            '<button class="btn" data-pick="B">Pick This One</button></div>' +
+        '</div>' +
+        '<div class="pane" id="reasonPane">' +
+          '<span class="pane-label">Reviewer\u2019s Notes</span>' +
+          '<div class="reason-placeholder" id="reasonPlaceholder">Make your call on the left \u2014 the reasoning question opens here.</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-pick]'), function(btn){
+    btn.addEventListener("click", function(){ pickManuscript(card, btn.getAttribute("data-pick")); });
+  });
+}
+
+function pickManuscript(card, choice){
+  if (state.showdownPick) return;
+  state.showdownPick = choice;
+  var correct = (choice === card.correctPick);
+
+  ["A","B"].forEach(function(letter){
+    var el = document.getElementById("ms" + letter);
+    el.querySelector('[data-pick]').disabled = true;
+    if (letter === choice){
+      el.classList.add(correct ? "picked-good" : "picked-bad");
+      var stamp = document.createElement("span");
+      stamp.className = "ms-stamp " + (correct ? "good" : "bad");
+      stamp.textContent = correct ? "Correct Call" : "Miscalled";
+      el.appendChild(stamp);
+    }
+  });
+
+  renderReason(card);
+}
+
+function renderReason(card){
+  var pane = document.getElementById("reasonPane");
+  var optsHtml = card.reasonOptions.map(function(opt, i){
+    return '<button class="reason-opt" data-reason="' + i + '">' + esc(opt) + '</button>';
+  }).join("");
+  pane.innerHTML = '<span class="pane-label">Reviewer\u2019s Notes</span>' +
+    '<p class="reason-q">Why is Manuscript ' + card.correctPick + ' the stronger design?</p>' +
+    optsHtml +
+    '<div id="explainSlot"></div>' +
+    '<button class="btn btn-quiet btn-wide" id="nextBtn" style="display:none;">Next Case File \u2192</button>';
+
+  Array.prototype.forEach.call(pane.querySelectorAll('[data-reason]'), function(btn){
+    btn.addEventListener("click", function(){ answerReason(card, parseInt(btn.getAttribute("data-reason"), 10)); });
+  });
+  document.getElementById("nextBtn").addEventListener("click", nextCard);
+}
+
+function answerReason(card, choiceIdx){
+  if (state.showdownReasonAnswered) return;
+  state.showdownReasonAnswered = true;
+  var reasonCorrect = (choiceIdx === card.correctReason);
+  var pickCorrect = (state.showdownPick === card.correctPick);
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-reason]'), function(btn, i){
+    btn.disabled = true;
+    if (i === card.correctReason) btn.classList.add("correct");
+    else if (i === choiceIdx) btn.classList.add("incorrect");
+  });
+
+  var half = TIER_POINTS[card.tier] / 2;
+  var pts = (pickCorrect ? half : 0) + (reasonCorrect ? half : 0);
+  state.score += pts;
+  state.resolvedCount++;
+
+  var cleanFirstTry = pickCorrect && reasonCorrect;
+  if (cleanFirstTry){
+    state.correctCount++;
+    state.streak++;
+    state.bestStreak = Math.max(state.bestStreak, state.streak);
+  } else {
+    state.streak = 0;
+  }
+
+  document.getElementById("explainSlot").innerHTML =
+    '<div class="explain-box"><b>' + esc(card.correctPick) + ' was the stronger design.</b> ' + esc(card.explanation) +
+    '<div class="points-earned mono">+' + pts + ' pts (' + (pickCorrect ? "pick correct" : "pick wrong") + ', ' + (reasonCorrect ? "reasoning correct" : "reasoning wrong") + ')</div></div>';
+
+  document.getElementById("nextBtn").style.display = "block";
+  renderMeta();
+  pushPlayerProgress();
+}
+
+/* ---------------- FLOW ---------------- */
+
+function nextCard(){
+  state.idx++;
+  resetCardState();
+  render();
+}
+
+function renderSummary(){
+  var accuracy = state.resolvedCount ? Math.round((state.correctCount / state.resolvedCount) * 100) : 0;
+  var app = document.getElementById("app");
+  app.innerHTML =
+    '<div class="folder"><div class="summary">' +
+      '<div class="big serif mono">' + state.score + '</div>' +
+      '<div class="cap">Total Points</div>' +
+      '<div class="stat-row">' +
+        '<div class="stat-tile"><span class="n mono">' + accuracy + '%</span><span class="l">Clean First-Try Rate</span></div>' +
+        '<div class="stat-tile"><span class="n mono">' + state.bestStreak + '</span><span class="l">Best Streak</span></div>' +
+        '<div class="stat-tile"><span class="n mono">' + state.correctCount + '/' + state.resolvedCount + '</span><span class="l">Fully Correct</span></div>' +
+      '</div>' +
+      '<button class="btn" id="restartBtn">Back to Review Lobby</button>' +
+    '</div></div>';
+  document.getElementById("restartBtn").addEventListener("click", function(){
+    showLobby();
+  });
+}
+
+function mmss(sec){ var m=Math.floor(sec/60),s=sec%60; return m+":"+(s<10?"0":"")+s; }
+function showGate(html){ var gate=document.getElementById("gate"); gate.style.display="block"; gate.innerHTML=html; }
+function hideGate(){ document.getElementById("gate").style.display="none"; }
+function registerView(message){
+  showGate('<div class="gate-card"><div class="mono" style="font-size:11px;color:var(--ink-soft)">AP STATISTICS · PEER REVIEW DESK</div><h1>Double Blind</h1><p>Complete methodologies and compare submissions under the room clock.</p><label>Game code</label><input id="codeInput" class="code-input" maxlength="6" value="'+esc(state.gameCode)+'"><label>Student ID</label><input id="idInput" inputmode="numeric" maxlength="10" value="'+esc(Engine.identity.studentId)+'"><div class="gate-error" id="joinError">'+esc(message||"")+'</div><button class="btn btn-wide" id="joinBtn">Begin Review Session</button></div>');
+  document.getElementById("joinBtn").onclick=joinGame;
+}
+function lobbyView(){
+  showGate('<div class="gate-card" style="text-align:center"><div class="mono" style="font-size:11px;color:var(--ink-soft)">'+esc(Engine.identity.displayName)+' · PERIOD '+esc(Engine.identity.period)+'</div><h1>Checked In</h1><p><span style="color:var(--accept)">●</span> Waiting for the teacher to open the next review round.</p><p>Build cards allow revision after a three-second lock. Showdowns allow one pick and one reason. Only a completely correct first attempt extends your streak.</p><button class="btn btn-quiet" id="switchBtn">Switch Game Code</button></div>');
+  document.getElementById("switchBtn").onclick=function(){ Engine.session.stopPolling(); state.gameCode=""; localStorage.removeItem("doubleblind_code"); registerView(""); };
+  sendLobbyPresence();
+}
+function joinGame(){
+  var code=document.getElementById("codeInput").value.toUpperCase().replace(/[^A-Z0-9]/g,""),id=document.getElementById("idInput").value.trim(),err=document.getElementById("joinError"),btn=document.getElementById("joinBtn");
+  if(!code||!id){ err.textContent="Enter both the projected code and your student ID."; return; }
+  btn.disabled=true; err.textContent="Checking…";
+  Promise.all([Engine.session.checkCode(code),Engine.identity.lookup(id)]).then(function(res){
+    if(!res[0]) throw new Error("code");
+    if(!res[1]||!res[1].found) throw new Error("student");
+    state.gameCode=code; localStorage.setItem("doubleblind_code",code); startPolling(code); lobbyView();
+  }).catch(function(e){ btn.disabled=false; err.textContent=e.message==="student"?"That student ID is not on the roster.":e.message==="code"?"That game code is not active.":"Could not reach the game board — try again."; });
+}
+function sendLobbyPresence(){
+  if(!state.gameCode||!Engine.identity.isLoggedIn()) return;
+  Engine.players.pushWaitingPresence({code:state.gameCode,studentId:Engine.identity.studentId,displayName:Engine.identity.displayName,period:Engine.identity.period});
+}
+setInterval(function(){ if(document.getElementById("gate").style.display!=="none") sendLobbyPresence(); },LOBBY_HEARTBEAT_MS);
+function enterRound(game){
+  var plan=Engine.round.plan(game,state.joinedRound!==-1); if(!plan||plan.round===state.joinedRound) return;
+  state.joinedRound=plan.round; state.announcedEndsAt=game.gameEndsAt; state.localCountdownEnd=plan.countdownEnd; state.localPlayEnd=plan.playEnd; state.joinedLate=plan.late; state.joinedSeconds=plan.secondsAvailable;
+  if(plan.countdownEnd){ showGate(Engine.ui.maskHtml(plan.countdownEnd,"Review begins in","The next case file is arriving at your desk.")); state.countdownHandle=Engine.round.runCountdown(plan.countdownEnd,function(n){Engine.ui.setMaskNum(n);},beginRound); }
+  else beginRound();
+}
+function beginRound(){
+  state.countdownHandle=null; state.deck=buildDeck(); state.idx=0; state.score=0; state.streak=0; state.bestStreak=0; state.resolvedCount=0; state.correctCount=0; resetCardState(); hideGate(); pushPlayerProgress(true); render();
+  clearInterval(state.timerId); state.timerId=setInterval(roundTick,250); roundTick();
+}
+function roundTick(){
+  var left=Math.max(0,Math.ceil((state.localPlayEnd-Date.now())/1000)); state.secondsLeft=left;
+  var el=document.getElementById("timeNum"); if(el) el.textContent=mmss(left);
+  if(left<=0){ clearInterval(state.timerId); finishRun(); }
+}
+function finishRun(){
+  if(document.getElementById("gate").getAttribute("data-finished")==String(state.joinedRound)) return;
+  document.getElementById("gate").setAttribute("data-finished",String(state.joinedRound));
+  clearInterval(state.lockTimer); state.lockTimer=null; pushPlayerProgress(true);
+  var accuracy=state.resolvedCount?Math.round(state.correctCount/state.resolvedCount*100):0;
+  Engine.players.saveRun({code:state.gameCode,round:state.joinedRound,studentId:Engine.identity.studentId,displayName:Engine.identity.displayName,period:Engine.identity.period,score:state.score,correct:state.correctCount,attempted:state.resolvedCount,accuracy:accuracy,bestStreak:state.bestStreak});
+  hideGate(); renderSummary();
+}
+var progressTimer=null,progressDirty=false;
+function pushPlayerProgress(force){
+  if(!state.gameCode||state.joinedRound<0)return; progressDirty=true;
+  if(force){ clearTimeout(progressTimer); progressTimer=null; flushProgress(); }
+  else if(!progressTimer) progressTimer=setTimeout(function(){progressTimer=null;flushProgress();},PROGRESS_FLUSH_MS);
+}
+function flushProgress(){
+  if(!progressDirty)return; progressDirty=false;
+  Engine.players.pushProgress({code:state.gameCode,round:state.joinedRound,studentId:Engine.identity.studentId,displayName:Engine.identity.displayName,period:Engine.identity.period,score:state.score,streak:state.streak,bestStreak:state.bestStreak,correct:state.correctCount,attempted:state.resolvedCount});
+}
+function showLobby(){ lobbyView(); }
+function startPolling(code){
+  Engine.session.startPolling(code,POLL_MS,function(game,meta){
+    state.game=game; meta=meta||{};
+    if(!game){ state.gameCode=""; localStorage.removeItem("doubleblind_code"); registerView(meta.retired?"Your teacher started a different game — enter the new code.":"That game is no longer active."); return; }
+    if(game.round!==state.joinedRound){ var phase=Engine.session.derivePhase(game); if(phase==="countdown"||phase==="live"){ if(state.countdownHandle)state.countdownHandle.cancel(); clearInterval(state.timerId); enterRound(game); return; } }
+    if(state.joinedRound===game.round&&state.localPlayEnd&&game.gameEndsAt<state.announcedEndsAt-1000){ state.localPlayEnd=Math.min(state.localPlayEnd,game.gameEndsAt); }
+  });
+}
+if(/[?&]selftest(?:=1)?(?:&|$)/.test(location.search)) randomizationSelfTest();
+state.gameCode=localStorage.getItem("doubleblind_code")||"";
+if(Engine.identity.isLoggedIn()&&state.gameCode){ startPolling(state.gameCode); lobbyView(); } else registerView("");
+})();
+</script>
+</body>
+</html>
