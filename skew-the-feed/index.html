@@ -138,6 +138,7 @@
   .verdict-btn{padding:18px 14px; border-radius:8px; border:2px solid var(--rule); background:var(--card); color:var(--ink); cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:5px; transition:border-color .12s, transform .08s; min-height:64px;}
   .verdict-btn:active{transform:scale(0.98);}
   .verdict-btn:hover, .verdict-btn:focus-visible{border-color:var(--ink);}
+  .verdict-btn.correct-reveal{ border-color: var(--wire); box-shadow: 0 0 0 2px var(--wire) inset; }
   .verdict-btn .vlabel{font-weight:700; font-size:16.5px;} .verdict-btn .vsub{font-size:12.5px; color:var(--ink-soft);}
   .verdict-btn .vbar{width:26px; height:5px; border-radius:3px; margin-bottom:3px;}
   .verdict-btn[data-cat="under"] .vbar{background:var(--under);}
@@ -534,6 +535,10 @@
     document.getElementById("scoreNum").textContent = state.score;
     document.getElementById("streakNum").textContent = state.streak;
     Array.prototype.forEach.call(document.querySelectorAll(".verdict-btn"), function(b){ b.disabled = true; });
+    if (!isCorrect){
+      var correctBtn = document.querySelector('.verdict-btn[data-cat="'+card.cat+'"]');
+      if (correctBtn) correctBtn.classList.add("correct-reveal");
+    }
     var overlay = document.getElementById("stampOverlay"); var stampEl = document.getElementById("stampEl");
     stampEl.className = "stamp "+(isCorrect?"correct":"wrong");
     stampEl.textContent = isCorrect ? "Confirmed" : "Misfiled";
