@@ -121,9 +121,6 @@
   .stamp{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(22px,6vw,34px); text-transform:uppercase; letter-spacing:.02em; padding:10px 22px; border-radius:6px; border:4px solid currentColor; transform:rotate(-7deg); text-align:center; box-shadow:0 6px 18px rgba(0,0,0,0.25);}
   .stamp.correct{color:var(--wire); background:var(--wire-ink);}
   .stamp.wrong{color:var(--flag); background:var(--flag-ink);}
-  .explain{background:var(--card); border:1px solid var(--rule); border-radius:10px; min-height:100%; padding:14px 16px 16px; font-size:14.5px; color:var(--ink-soft); display:flex; align-items:center;}
-  .explain.placeholder{font-style:italic;}
-  .explain.show{display:block;} .explain b{color:var(--ink);}
   .verdicts{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:0;}
   @media (max-width:899px){
     .play-active .wrap{padding:10px 12px;}
@@ -135,11 +132,13 @@
     .verdicts{gap:9px;}
     .verdict-btn{padding:14px 12px;}
   }
-  .verdict-btn{padding:18px 14px; border-radius:8px; border:2px solid var(--rule); background:var(--card); color:var(--ink); cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:5px; transition:border-color .12s, transform .08s; min-height:64px;}
+  .verdict-btn{padding:18px 14px; border-radius:6px; border:1.5px solid var(--rule); background:var(--card); color:var(--ink); cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:4px; transition:border-color .12s, transform .08s, box-shadow .12s;}
   .verdict-btn:active{transform:scale(0.98);}
   .verdict-btn:hover, .verdict-btn:focus-visible{border-color:var(--ink);}
-  .verdict-btn.correct-reveal{ border-color: var(--wire); box-shadow: 0 0 0 2px var(--wire) inset; }
-  .verdict-btn .vlabel{font-weight:700; font-size:16.5px;} .verdict-btn .vsub{font-size:12.5px; color:var(--ink-soft);}
+  .verdict-btn .vlabel{font-weight:700; font-size:16px;} .verdict-btn .vsub{font-size:12.5px; color:var(--ink-soft);}
+  .verdict-btn .vexplain{font-size:12.5px; color:var(--ink-soft); line-height:1.4; margin-top:4px; padding-top:6px; border-top:1px solid var(--rule); display:none;}
+  .verdict-btn.correct-reveal{border-color:var(--wire); box-shadow:0 0 0 2px var(--wire) inset;}
+  .verdict-btn.correct-reveal .vexplain{display:block; color:var(--ink);}
   .verdict-btn .vbar{width:26px; height:5px; border-radius:3px; margin-bottom:3px;}
   .verdict-btn[data-cat="under"] .vbar{background:var(--under);}
   .verdict-btn[data-cat="nonresponse"] .vbar{background:var(--nonresp);}
@@ -487,7 +486,8 @@
     var btns = CAT_ORDER.map(function(k){
       var c = CATS[k]; var cls = "verdict-btn"+(k==="clean"?" clean-btn":"");
       return '<button class="'+cls+'" data-cat="'+k+'" '+(state.answering?"disabled":"")+'>' +
-        '<span class="vbar"></span><span class="vlabel">'+esc(c.label)+'</span><span class="vsub">'+esc(c.sub)+'</span></button>';
+        '<span class="vbar"></span><span class="vlabel">'+esc(c.label)+'</span><span class="vsub">'+esc(c.sub)+'</span>' +
+        '<span class="vexplain"></span></button>';
     }).join("");
     var lateNote = state.joinedLate
       ? '<div class="late-note">Joined mid-shift &mdash; you have the '+mmss(state.joinedSeconds)+' left on the room clock.</div>'
@@ -514,9 +514,6 @@
           '</div>' +
           '<div class="verdicts" id="verdictGrid">'+btns+'</div>' +
         '</div>' +
-        '<div class="play-feedback">' +
-          '<div class="explain placeholder" id="explainBox">Feedback will appear here after you respond.</div>' +
-        '</div>' +
       '</div>';
   }
 
@@ -535,18 +532,16 @@
     document.getElementById("scoreNum").textContent = state.score;
     document.getElementById("streakNum").textContent = state.streak;
     Array.prototype.forEach.call(document.querySelectorAll(".verdict-btn"), function(b){ b.disabled = true; });
-    if (!isCorrect){
-      var correctBtn = document.querySelector('.verdict-btn[data-cat="'+card.cat+'"]');
-      if (correctBtn) correctBtn.classList.add("correct-reveal");
-    }
     var overlay = document.getElementById("stampOverlay"); var stampEl = document.getElementById("stampEl");
     stampEl.className = "stamp "+(isCorrect?"correct":"wrong");
     stampEl.textContent = isCorrect ? "Confirmed" : "Misfiled";
     overlay.classList.add("show");
-    var box = document.getElementById("explainBox");
-    box.innerHTML = '<b>'+esc(CATS[card.cat].label)+':</b> '+card.why;
-    box.classList.remove("placeholder");
-    box.classList.add("show");
+    var correctBtn = document.querySelector('.verdict-btn[data-cat="'+card.cat+'"]');
+    if (correctBtn){
+      correctBtn.classList.add("correct-reveal");
+      var explainEl = correctBtn.querySelector(".vexplain");
+      if (explainEl) explainEl.innerHTML = card.why;
+    }
     pushPlayerProgress();
     clearTimeout(state.answerTimer);
     state.answerTimer = setTimeout(function(){
