@@ -138,10 +138,25 @@
   .work-foot{display:flex; gap:20px; padding:10px 16px; border-top:1px solid var(--rule); font-family:"IBM Plex Mono",monospace; font-size:0.75rem; color:var(--ink-soft);}
   .step-choice{display:block; width:100%; margin:4px 0; padding:8px 10px; text-align:left; border:1px solid var(--rule); border-radius:4px; background:var(--card-2); color:var(--ink); cursor:pointer; font-family:"IBM Plex Mono",monospace;}
   .step-choice:disabled{opacity:.55; cursor:not-allowed;}
+  .step-choice.correct-glow,
+  #cleanChoice.correct-glow,
+  .verdict-btn.correct-glow{
+    border-color:var(--wire);
+    box-shadow:0 0 0 3px rgba(23,130,114,0.25), 0 0 16px rgba(23,130,114,0.5);
+    animation:verdictGlowPulse 0.9s ease-in-out infinite alternate;
+  }
+  .step-choice.correct-glow:disabled,
+  #cleanChoice.correct-glow:disabled,
+  .verdict-btn.correct-glow:disabled{opacity:1;}
+  @keyframes verdictGlowPulse{
+    from{box-shadow:0 0 0 2px rgba(23,130,114,0.18), 0 0 8px rgba(23,130,114,0.3);}
+    to{box-shadow:0 0 0 4px rgba(23,130,114,0.38), 0 0 22px rgba(23,130,114,0.6);}
+  }
   .answer-icon{float:right; font-family:system-ui,sans-serif; font-weight:800; font-size:1.125rem; line-height:1;}
   .answer-icon.correct{color:#178272;} .answer-icon.wrong{color:#D8433E;}
   .stamp-overlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(20,23,20,0.28); opacity:0; pointer-events:none; transition:opacity .15s ease;}
   .stamp-overlay.show{opacity:1; pointer-events:auto;}
+  .stamp-overlay.show.correct{background:rgba(20,23,20,0.06);}
   .stamp{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(1.375rem,6vw,2.125rem); text-transform:uppercase; letter-spacing:.02em; padding:10px 22px; border-radius:6px; border:2px solid currentColor; text-align:center;}
   .stamp.correct{color:var(--wire); background:var(--wire-ink); box-shadow:var(--glow-wire);}
   .stamp.wrong{color:var(--flag); background:var(--flag-ink); box-shadow:var(--glow-flag);}
@@ -595,13 +610,15 @@ var BANK = [
       return status ? '<span class="answer-icon '+status+'">'+(status === "correct" ? "✓" : "✗")+'</span>' : '';
     }
     var steps = card.steps.map(function(step, i){
-      return '<button class="step-choice" data-step-index="'+i+'" '+(state.answering || state.stage !== "locate"?"disabled":"")+'><span class="step-label"><b>Step '+(i+1)+'.</b></span><span class="math-step">'+esc(step)+'</span>'+iconHtml(state.icons.steps[i])+'</button>';
+      var stepCls = "step-choice"+(state.icons.steps[i] === "correct" ? " correct-glow" : "");
+      return '<button class="'+stepCls+'" data-step-index="'+i+'" '+(state.answering || state.stage !== "locate"?"disabled":"")+'><span class="step-label"><b>Step '+(i+1)+'.</b></span><span class="math-step">'+esc(step)+'</span>'+iconHtml(state.icons.steps[i])+'</button>';
     }).join("");
     var task = '<div class="task-line"><span class="math-step">'+esc(card.instruction)+'</span></div>';
     var given = '<div class="given-line"><span class="given-label">Given:</span><span class="math-step">'+esc(card.given)+'</span></div>';
     var btns = STAGE_TWO_CATEGORIES.map(function(k){
       var c = CATS[k];
-      return '<button class="verdict-btn" data-cat="'+k+'" '+(state.answering?"disabled":"")+'>' +
+      var cls = "verdict-btn"+(state.icons.categories[k] === "correct" ? " correct-glow" : "");
+      return '<button class="'+cls+'" data-cat="'+k+'" '+(state.answering?"disabled":"")+'>' +
         '<span class="vbar"></span><span class="vlabel">'+esc(c.label)+'</span><span class="vsub">'+esc(c.sub)+'</span>'+iconHtml(state.icons.categories[k])+'</button>';
     }).join("");
     var lateNote = state.joinedLate
@@ -627,7 +644,7 @@ var BANK = [
       '<div class="play-pane play-pane-work"><div class="work-card'+(card.steps.length > 5 ? ' work-card--dense' : '')+'">' +
         '<div class="work-head"><div class="work-who"><div class="work-title">Worked derivative</div><div class="work-meta">'+esc(card.tier)+' tier</div></div></div>' +
         '<div class="work-body">'+task+given+'<p><b>Stage 1: Locate the error.</b> Tap the first incorrect step, or choose Clean.</p><div id="stepList" class="step-list">'+steps+'</div>' +
-          '<button class="btn btn-ghost" id="cleanChoice" '+(state.answering || state.stage !== "locate"?"disabled":"")+'>Clean — No Error'+iconHtml(state.icons.clean)+'</button>' +
+          '<button class="btn btn-ghost'+(state.icons.clean === "correct" ? " correct-glow" : "")+'" id="cleanChoice" '+(state.answering || state.stage !== "locate"?"disabled":"")+'>Clean — No Error'+iconHtml(state.icons.clean)+'</button>' +
           '<button class="btn btn-ghost skip-control" id="skipLocateBtn" '+(state.answering || state.stage !== "locate"?"disabled":"")+'>Skip this item</button></div>' +
       '</div></div>' +
       '<div class="play-pane play-pane-classify"><div class="card classify-card">'+classify+'</div></div>' +
@@ -653,7 +670,7 @@ var BANK = [
   function resolveStageOneMiss(card, title, detail){
     state.attempted += 1; state.streak = 0; recordMiss(card);
     pushPlayerProgress();
-    finishItem(title, detail, 2600);
+    finishItem(title, detail, 5000);
   }
 
   function finishItem(title, detail, delay){
@@ -678,7 +695,7 @@ var BANK = [
     if (card.errorStepIndex === null && pickedClean){
       state.icons.clean = "correct";
       awardStageOneCorrect(card);
-      finishItem("Correct", "This item is clean — no step contains an error.", 1500);
+      finishItem("Correct", "This item is clean — no step contains an error.", 3000);
     } else if (card.errorStepIndex === null && !pickedClean){
       state.icons.steps[choice] = "wrong";
       resolveStageOneMiss(card, "Incorrect", "This item is clean — no step contains an error.");
@@ -706,7 +723,7 @@ var BANK = [
     pushPlayerProgress();
     finishItem(correct ? "Correct category — +5 bonus" : "Category missed — no +5 bonus",
       correct ? "You earned the 5-point category bonus." : "This was actually a "+CATS[card.errorCategory].label+". Your Stage 1 tier points and streak are unchanged.",
-      correct ? 1500 : 2600);
+      correct ? 3000 : 5000);
   }
 
   function handleSkip(){
@@ -723,7 +740,7 @@ var BANK = [
     } else if (state.stage === "classify"){
       state.icons.categories[card.errorCategory] = "correct";
       recordMiss(card); pushPlayerProgress();
-      finishItem("Category skipped — no +5 bonus", "This was actually a "+CATS[card.errorCategory].label+". Your Stage 1 tier points and streak are unchanged.", 2600);
+      finishItem("Category skipped — no +5 bonus", "This was actually a "+CATS[card.errorCategory].label+". Your Stage 1 tier points and streak are unchanged.", 5000);
     }
   }
 

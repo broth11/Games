@@ -118,6 +118,7 @@
   .post-foot{display:flex; gap:20px; padding:10px 16px; border-top:1px solid var(--rule); font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-soft);}
   .stamp-overlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(20,23,20,0.28); opacity:0; pointer-events:none; transition:opacity .15s ease;}
   .stamp-overlay.show{opacity:1; pointer-events:auto;}
+  .stamp-overlay.show.correct{background:rgba(20,23,20,0.06);}
   .stamp{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(22px,6vw,34px); text-transform:uppercase; letter-spacing:.02em; padding:10px 22px; border-radius:6px; border:4px solid currentColor; transform:rotate(-7deg); text-align:center; box-shadow:0 6px 18px rgba(0,0,0,0.25);}
   .stamp.correct{color:var(--wire); background:var(--wire-ink);}
   .stamp.wrong{color:var(--flag); background:var(--flag-ink);}
@@ -137,8 +138,17 @@
   .verdict-btn:hover, .verdict-btn:focus-visible{border-color:var(--ink);}
   .verdict-btn .vlabel{font-weight:700; font-size:16px;} .verdict-btn .vsub{font-size:12.5px; color:var(--ink-soft);}
   .verdict-btn .vexplain{font-size:12.5px; color:var(--ink-soft); line-height:1.4; margin-top:4px; padding-top:6px; border-top:1px solid var(--rule); display:none;}
-  .verdict-btn.correct-reveal{border-color:var(--wire); box-shadow:0 0 0 2px var(--wire) inset;}
-  .verdict-btn.correct-reveal .vexplain{display:block; color:var(--ink);}
+  .verdict-btn.correct-glow{
+    border-color:var(--wire);
+    box-shadow:0 0 0 3px rgba(23,130,114,0.25), 0 0 16px rgba(23,130,114,0.5);
+    animation:verdictGlowPulse 0.9s ease-in-out infinite alternate;
+  }
+  .verdict-btn.correct-glow:disabled{opacity:1;}
+  .verdict-btn.correct-glow .vexplain{display:block; color:var(--ink);}
+  @keyframes verdictGlowPulse{
+    from{box-shadow:0 0 0 2px rgba(23,130,114,0.18), 0 0 8px rgba(23,130,114,0.3);}
+    to{box-shadow:0 0 0 4px rgba(23,130,114,0.38), 0 0 22px rgba(23,130,114,0.6);}
+  }
   .verdict-btn .vbar{width:26px; height:5px; border-radius:3px; margin-bottom:3px;}
   .verdict-btn[data-cat="under"] .vbar{background:var(--under);}
   .verdict-btn[data-cat="nonresponse"] .vbar{background:var(--nonresp);}
@@ -541,9 +551,10 @@
     stampEl.className = "stamp "+(isCorrect?"correct":"wrong");
     stampEl.textContent = isCorrect ? "Confirmed" : "Misfiled";
     overlay.classList.add("show");
+    overlay.classList.toggle("correct", isCorrect);
     var correctBtn = document.querySelector('.verdict-btn[data-cat="'+card.cat+'"]');
     if (correctBtn){
-      correctBtn.classList.add("correct-reveal");
+      correctBtn.classList.add("correct-glow");
       var explainEl = correctBtn.querySelector(".vexplain");
       if (explainEl) explainEl.innerHTML = card.why;
     }
@@ -555,7 +566,7 @@
       state.idx += 1; state.answering = false;
       if (state.secondsLeft <= 0){ clearInterval(state.timerId); finishRun(); }
       render();
-    }, isCorrect ? 1500 : 2600);
+    }, isCorrect ? 3000 : 5000);
   }
 
   function finishRun(){
