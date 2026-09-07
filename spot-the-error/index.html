@@ -36,6 +36,14 @@
   :focus-visible{outline:3px solid var(--focus); outline-offset:2px;}
   @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
   .wrap{max-width:640px; margin:0 auto; padding:28px 18px 60px;}
+  .wrap:has(.register-shell){max-width:1040px;}
+  .register-shell{display:block;}
+  .register-cols{display:flex; flex-direction:column; gap:16px;}
+  @media (min-width:760px){
+    .register-cols{display:grid; grid-template-columns:1fr 1fr; align-items:start; gap:20px;}
+    .register-cols .card{margin-top:0;}
+  }
+  .register-leaderboard{margin-top:20px;}
   .masthead{text-align:center; margin-bottom:22px;}
   .masthead{position:relative;}
   .masthead::before{
@@ -472,24 +480,30 @@ var BANK = [
     }).join("");
     return '' +
       masthead() +
-      '<div class="card stack">' +
-        '<div><p class="eyebrow">Your Assignment</p><h2 class="section-title">Inspect the working</h2>' +
-        '<p>Each item shows a worked derivative. Locate the first incorrect step, or choose Clean when every step is correct. Then classify the kind of slip.</p></div>' +
-        '<div class="legend">' + legendRows + '</div>' +
-      '</div>' +
-      '<div class="card stack" style="margin-top:16px;">' +
-        '<div><p class="eyebrow">Student sign-in</p><h2 class="section-title">Join the round</h2></div>' +
-        '<div class="field"><label for="codeInput">Game code (from your teacher\'s screen)</label>' +
-          '<input id="codeInput" class="code-input" type="text" maxlength="6" placeholder="&mdash; &mdash; &mdash; &mdash;" value="'+esc(state.gameCode)+'" autocomplete="off" autocapitalize="characters" />' +
-          '<p style="font-size:0.71875rem; color:var(--ink-soft); margin:6px 2px 0;">Letters and numbers only &mdash; codes never use 0, 1, I, L, or O.</p></div>' +
-        '<div class="field"><label for="idInput">Your student ID</label>' +
-          '<input id="idInput" type="text" inputmode="numeric" maxlength="10" placeholder="e.g. 19136" value="'+esc(Engine.identity.studentId)+'" /></div>' +
-        '<div class="err" id="regErr">' + esc(state.joinError) + '</div>' +
-        '<button class="btn btn-flag" id="startBtn">Join the Marking Desk</button>' +
-      '</div>' +
-      leaderboardPreview() +
-      '<div style="text-align:center;"><button class="link-quiet" id="toLbBtn">View full leaderboard &rarr;</button></div>' +
-      '<p class="foot-note">Completed rounds are recorded on the shared class leaderboard.</p>';
+      '<div class="register-shell">' +
+        '<div class="register-cols">' +
+          '<div class="card stack">' +
+            '<div><p class="eyebrow">Your Assignment</p><h2 class="section-title">Inspect the working</h2>' +
+            '<p>Each item shows a worked derivative. Locate the first incorrect step, or choose Clean when every step is correct. Then classify the kind of slip.</p></div>' +
+            '<div class="legend">' + legendRows + '</div>' +
+          '</div>' +
+          '<div class="card stack">' +
+            '<div><p class="eyebrow">Student sign-in</p><h2 class="section-title">Join the round</h2></div>' +
+            '<div class="field"><label for="codeInput">Game code (from your teacher\'s screen)</label>' +
+              '<input id="codeInput" class="code-input" type="text" maxlength="6" placeholder="&mdash; &mdash; &mdash; &mdash;" value="'+esc(state.gameCode)+'" autocomplete="off" autocapitalize="characters" />' +
+              '<p style="font-size:0.71875rem; color:var(--ink-soft); margin:6px 2px 0;">Letters and numbers only &mdash; codes never use 0, 1, I, L, or O.</p></div>' +
+            '<div class="field"><label for="idInput">Your student ID</label>' +
+              '<input id="idInput" type="text" inputmode="numeric" maxlength="10" placeholder="e.g. 19136" value="'+esc(Engine.identity.studentId)+'" /></div>' +
+            '<div class="err" id="regErr">' + esc(state.joinError) + '</div>' +
+            '<button class="btn btn-flag" id="startBtn">Join the Marking Desk</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="register-leaderboard">' +
+          leaderboardPreview() +
+          '<div style="text-align:center;"><button class="link-quiet" id="toLbBtn">View full leaderboard &rarr;</button></div>' +
+          '<p class="foot-note">Completed rounds are recorded on the shared class leaderboard.</p>' +
+        '</div>' +
+      '</div>';
   }
 
   function leaderboardPreview(){
