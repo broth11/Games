@@ -3,9 +3,9 @@
 One subfolder per `gameType`, mirroring the game folders at the repo root.
 A game's `host.html` points at these with `../audio/<game-type>/<file>.mp3`.
 
-The Skew the Feed files are synthesized placeholders: correct in format and
-seamlessly looping, but plain tones intended for wiring checks. Spot the Error
-uses the credited OpenGameArt tracks listed below.
+Some Skew the Feed files began as synthesized placeholders: correct in format
+and seamlessly looping, but plain tones intended for wiring checks. Production
+tracks are credited below.
 
 ## Replacing a placeholder
 
@@ -53,4 +53,8 @@ re-encoding the files — it's one constant and it applies to every game.
 - **Spot the Error — `live.mp3`:** “Cyberpunk Moonlight Sonata” by Joth,
   sourced from OpenGameArt; CC0 (public domain).
 - **Spot the Error — `idle.mp3`:** “In the Lobby” by Umplix, sourced from
+  OpenGameArt; CC0 (public domain).
+- **Skew the Feed — `live.mp3`:** “Endless Cyber Runner” by Eric Matyas,
+  soundimage.org; CC-BY 4.0.
+- **Skew the Feed — `idle.mp3`:** “In the Lobby” by Umplix, sourced from
   OpenGameArt; CC0 (public domain).

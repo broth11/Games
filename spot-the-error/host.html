@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <style>
   :root{
     --paper:#E7EBE2; --card:#F8FAF4; --card-2:#EFF2E8; --ink:#1B1F1A; --ink-soft:#565F53;
@@ -54,6 +55,7 @@
   .err{color:var(--flag); font-size:0.8125rem; margin-top:8px; min-height:16px;}
   .code-input{text-transform:uppercase; text-align:center; letter-spacing:.3em; font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:1.375rem !important;}
   .link-quiet{background:none; border:none; color:var(--ink-soft); font-family:"IBM Plex Mono",monospace; font-size:0.75rem; text-decoration:underline; cursor:pointer; padding:6px 0;}
+  .link-quiet i, .mute-btn i{font-size:0.95em; margin-right:6px;}
   table.lb{width:100%; border-collapse:collapse; margin-top:14px; font-size:0.875rem;}
   table.lb th{text-align:left; font-family:"IBM Plex Mono",monospace; font-size:0.65625rem; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); padding:0 6px 8px; border-bottom:2px solid var(--ink);}
   table.lb td{padding:9px 6px; border-bottom:1px solid var(--rule); vertical-align:middle;}
@@ -84,6 +86,7 @@
   .dashboard-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:16px;}
   .dashboard-grid .masthead{margin:0;}
   .host-utility-links{text-align:center; margin-top:16px; padding-top:12px; border-top:1px solid var(--rule);}
+  .music-credit{margin-top:10px; font-family:"IBM Plex Mono",monospace; font-size:0.65625rem; color:var(--ink-soft); line-height:1.4; text-align:center;}
   @media (min-width:900px){
     .wrap{max-width:1180px; padding:32px 28px 60px;}
     .dashboard-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px;}
@@ -149,8 +152,10 @@
 
   function muteBtnHtml(){
     var m = Engine.audio.isMuted();
+    var blocked = Engine.audio.needsGesture && Engine.audio.needsGesture();
+    var icon = (m || blocked) ? "fa-volume-xmark" : "fa-volume-high";
     return '<button class="mute-btn'+(m?" muted":"")+'" id="muteBtn" title="Toggle background music">' +
-      (m ? "&#128263; Muted" : "&#128266; Sound") + '</button>';
+      '<i class="fa-solid '+icon+'" aria-hidden="true"></i>' + (m ? "Muted" : "Sound") + '</button>';
   }
 
   var DEFAULT_MINUTES = 5;
@@ -278,7 +283,7 @@
       '<div class="card dashboard-controls">' +
         '<div class="host-top"><div><p class="eyebrow" style="margin:0;">Host controls</p><h2 class="section-title" style="margin:0;">Run the round</h2></div>' +
           '<div class="host-top-right">' + muteBtnHtml() +
-            (Engine.audio.needsGesture && Engine.audio.needsGesture() ? '<button class="mute-btn" id="audioEnableBtn">Enable music</button>' : '') +
+            (Engine.audio.needsGesture && Engine.audio.needsGesture() ? '<button class="mute-btn" id="audioEnableBtn"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i>Enable music</button>' : '') +
             '<span class="phase-pill '+phase+'" id="hostPhasePill">'+phaseLabel(phase)+'</span></div></div>' +
         (state.hostMisses ? '<p class="host-note" id="hostReconnectNote">Reconnecting to the game board&hellip;</p>' : '') +
         '<div class="big-clock mono" id="hostClockNum">'+clockText(game, phase)+'</div>' +
@@ -292,12 +297,13 @@
         (phase==="ended" ? '<button class="btn btn-ghost" id="showResultsBtn" style="margin-top:10px;">Show Round Results</button>' : '') +
         '<p class="host-note">Every device gets its own 5-second countdown the moment it hears the round start, then the full time you set. Anyone joining after that gets whatever time is left on this clock.</p>' +
         '<div class="host-utility-links">' +
-          '<button class="link-quiet" id="historyBtn" style="display:block; margin:0 auto;">View history (this round · this game · all games)</button>' +
-          '<button class="link-quiet" id="newGameToggle" style="display:block; margin:8px auto 0;">Start a different game (new code)</button>' +
+          '<button class="link-quiet" id="historyBtn" style="display:block; margin:0 auto;"><i class="fa-solid fa-square-poll-vertical" aria-hidden="true"></i>View history (this round · this game · all games)</button>' +
+          '<button class="link-quiet" id="newGameToggle" style="display:block; margin:8px auto 0;"><i class="fa-solid fa-square-binary" aria-hidden="true"></i>Start a different game (new code)</button>' +
           '<div class="reset-box" id="newGameBox" style="display:none; max-width:320px; margin:8px auto 0;">' +
             '<input type="text" id="newGameConfirm" placeholder="Type NEW to confirm" />' +
             '<button class="btn btn-ghost btn-sm" id="newGameGo" style="width:auto;">Go</button>' +
           '</div>' +
+          '<div class="music-credit">Music: &ldquo;In the Lobby&rdquo; by Umplix; &ldquo;Cyberpunk Moonlight Sonata&rdquo; by Joth.</div>' +
         '</div>' +
       '</div>' +
       '<div class="card dashboard-scoreboard">' +
@@ -642,7 +648,9 @@
     if ((el = document.getElementById("muteBtn"))) el.addEventListener("click", function(){
       Engine.audio.setMuted(!Engine.audio.isMuted());
       this.className = "mute-btn" + (Engine.audio.isMuted() ? " muted" : "");
-      this.innerHTML = Engine.audio.isMuted() ? "&#128263; Muted" : "&#128266; Sound";
+      this.innerHTML = Engine.audio.isMuted()
+        ? '<i class="fa-solid fa-volume-xmark" aria-hidden="true"></i>Muted'
+        : '<i class="fa-solid fa-volume-high" aria-hidden="true"></i>Sound';
     });
     if ((el = document.getElementById("audioEnableBtn"))) el.addEventListener("click", function(){
       Engine.audio.unlock();
