@@ -198,6 +198,7 @@
   .classify-placeholder{height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--ink-soft); font-size:0.875rem; padding:18px;}
   .classify-card .explain.miss-fill{height:100%; margin:0; border:1px solid var(--flag); border-radius:10px; padding:20px 22px; font-size:1rem; line-height:1.45; color:var(--ink); overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; justify-content:center;}
   .classify-card .explain.miss-fill--category{justify-content:flex-start;}
+  .classify-card .miss-fill-text{width:100%;}
   .classify-card .miss-cat{display:flex; flex-direction:column; gap:4px; margin-bottom:14px;}
   .classify-card .miss-cat .vbar{width:26px; height:5px; border-radius:3px;}
   .classify-card .miss-cat .vlabel{font-weight:700; font-size:1.03125rem; color:var(--ink);}
@@ -588,12 +589,12 @@
     var isMiss = state.feedbackKind === "stage1Miss" || state.feedbackKind === "stage2Miss";
     var classify;
     if (state.feedbackKind === "stage1Miss"){
-      classify = '<div class="explain show miss-fill">'+feedbackBody+'</div>';
+      classify = '<div class="explain show miss-fill"><div class="miss-fill-text">'+feedbackBody+'</div></div>';
     } else if (state.feedbackKind === "stage2Miss"){
       var cc = CATS[card.errorCategory];
       classify = '<div class="explain show miss-fill miss-fill--category">' +
         '<div class="miss-cat"><span class="vbar" style="background:'+cc.color+';"></span><span class="vlabel">'+esc(cc.label)+'</span></div>' +
-        feedbackBody + '</div>';
+        '<div class="miss-fill-text">'+feedbackBody+'</div></div>';
     } else if (state.stage === "classify"){
       classify = '<p class="eyebrow">Stage 2</p><h2 class="section-title">Classify the slip</h2><div class="verdicts" id="verdictGrid">'+btns+'</div>';
     } else {
