@@ -209,8 +209,8 @@
   .play-explanation{grid-column:2; grid-row:3; min-height:0; overflow:hidden; position:relative;}
   .play-explanation .explain{display:block; height:100%; margin:0; border:1px solid var(--rule); border-radius:10px; overflow-y:auto; overscroll-behavior:contain;}
   .play-explanation .explain-empty{display:flex; align-items:center; justify-content:center; text-align:center; color:var(--ink-soft); font-style:italic;}
-  .score-pops{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; pointer-events:none;}
-  .score-pop{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:1.3rem; line-height:1; letter-spacing:.02em; color:var(--wire); transform-origin:center; animation:scoreGrow var(--pop-dur,1500ms) linear var(--pop-delay,0ms) forwards;}
+  .score-pops{position:absolute; right:10px; bottom:8px; display:flex; flex-direction:column-reverse; align-items:flex-end; gap:6px; pointer-events:none; z-index:6;}
+  .score-pop{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:1.3rem; line-height:1; letter-spacing:.02em; color:var(--wire); transform-origin:bottom right; animation:scoreGrow var(--pop-dur,1500ms) linear var(--pop-delay,0ms) forwards;}
   .score-pop--bonus{color:var(--chain); font-size:1.05rem;}
   @keyframes scoreGrow{ from{transform:scale(1);} to{transform:scale(2);} }
   .task-line{margin:0 0 6px; font-weight:700;}
