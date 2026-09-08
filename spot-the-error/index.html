@@ -195,6 +195,11 @@
   .play-pane-classify .card{margin-top:0;}
   .classify-card{overflow:auto;}
   .classify-placeholder{height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--ink-soft); font-size:0.875rem; padding:18px;}
+  .classify-card .explain.miss-fill{height:100%; margin:0; border:1px solid var(--flag); border-radius:10px; padding:20px 22px; font-size:1rem; line-height:1.45; color:var(--ink); overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; justify-content:center;}
+  .classify-card .explain.miss-fill--category{justify-content:flex-start;}
+  .classify-card .miss-cat{display:flex; flex-direction:column; gap:4px; margin-bottom:14px;}
+  .classify-card .miss-cat .vbar{width:26px; height:5px; border-radius:3px;}
+  .classify-card .miss-cat .vlabel{font-weight:700; font-size:1.03125rem; color:var(--ink);}
   .play-pane-work .work-body{padding-bottom:10px;}
   .work-body{display:flex; flex:1 1 auto; flex-direction:column; min-height:0; overflow:hidden;}
   .work-body > p{margin:8px 0;}
@@ -313,7 +318,7 @@
 
     deck: [], idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, attempted: 0, misses: {},
     secondsLeft: 0, timerId: null, answering: false, answerTimer: null, countdownHandle: null,
-    stage: "locate", feedback: null, icons: {steps:{}, clean:"", categories:{}},
+    stage: "locate", feedback: null, feedbackKind: null, icons: {steps:{}, clean:"", categories:{}},
 
     lbCache: [], lbLoaded: false
   };
@@ -528,7 +533,7 @@
   function beginLocalRound(){
     state.deck = buildDeck(); state.idx = 0; state.score = 0; state.streak = 0; state.bestStreak = 0;
     state.correct = 0; state.attempted = 0; state.misses = {}; state.answering = false;
-    state.stage = "locate"; state.feedback = null; state.icons = {steps:{}, clean:"", categories:{}};
+    state.stage = "locate"; state.feedback = null; state.feedbackKind = null; state.icons = {steps:{}, clean:"", categories:{}};
     state.screen = "play";
     pushPlayerProgress(true);
     render();
@@ -576,10 +581,24 @@
     var lateNote = state.joinedLate
       ? '<div class="late-note">Joined mid-round &mdash; you have '+mmss(state.joinedSeconds)+' left on the room clock.</div>'
       : '';
-    var classify = state.stage === "classify"
-      ? '<p class="eyebrow">Stage 2</p><h2 class="section-title">Classify the slip</h2><div class="verdicts" id="verdictGrid">'+btns+'</div>'
-      : '<div class="classify-placeholder">Stage 2 will appear here after you locate an error.</div>';
-    var explanation = state.feedback
+    var feedbackBody = state.feedback
+      ? '<b>'+esc(state.feedback.title)+'.</b> '+esc(state.feedback.detail)+'<br>'+card.explanation
+      : '';
+    var isMiss = state.feedbackKind === "stage1Miss" || state.feedbackKind === "stage2Miss";
+    var classify;
+    if (state.feedbackKind === "stage1Miss"){
+      classify = '<div class="explain show miss-fill">'+feedbackBody+'</div>';
+    } else if (state.feedbackKind === "stage2Miss"){
+      var cc = CATS[card.errorCategory];
+      classify = '<div class="explain show miss-fill miss-fill--category">' +
+        '<div class="miss-cat"><span class="vbar" style="background:'+cc.color+';"></span><span class="vlabel">'+esc(cc.label)+'</span></div>' +
+        feedbackBody + '</div>';
+    } else if (state.stage === "classify"){
+      classify = '<p class="eyebrow">Stage 2</p><h2 class="section-title">Classify the slip</h2><div class="verdicts" id="verdictGrid">'+btns+'</div>';
+    } else {
+      classify = '<div class="classify-placeholder">Stage 2 will appear here after you locate an error.</div>';
+    }
+    var explanation = (state.feedback && !isMiss)
       ? '<div class="explain show"><b>'+esc(state.feedback.title)+'.</b> '+esc(state.feedback.detail)+'<br>'+card.explanation+'</div>'
       : '<div class="explain explain-empty">Feedback will appear here after you respond.</div>';
     return '' +
@@ -621,6 +640,7 @@
   function resolveStageOneMiss(card, title, detail){
     state.attempted += 1; state.streak = 0; recordMiss(card);
     pushPlayerProgress();
+    state.feedbackKind = "stage1Miss";
     finishItem(title, detail, 7000);
   }
 
@@ -631,7 +651,7 @@
     state.answerTimer = setTimeout(function(){
       state.answerTimer = null;
       if (state.screen !== "play") return;   // a force-end landed while reading
-      state.idx += 1; state.answering = false; state.stage = "locate"; state.feedback = null;
+      state.idx += 1; state.answering = false; state.stage = "locate"; state.feedback = null; state.feedbackKind = null;
       state.icons = {steps:{}, clean:"", categories:{}};
       if (state.secondsLeft <= 0){ clearInterval(state.timerId); finishRun(); }
       render();
@@ -646,6 +666,7 @@
     if (card.errorStepIndex === null && pickedClean){
       state.icons.clean = "correct";
       awardStageOneCorrect(card);
+      state.feedbackKind = "correct";
       finishItem("Correct", "This item is clean — no step contains an error.", 1500);
     } else if (card.errorStepIndex === null && !pickedClean){
       state.icons.steps[choice] = "wrong";
@@ -672,6 +693,7 @@
     if (correct) state.score += 5;
     else recordMiss(card);
     pushPlayerProgress();
+    state.feedbackKind = correct ? "correct" : "stage2Miss";
     finishItem(correct ? "Correct category — +5 bonus" : "Category missed — no +5 bonus",
       correct ? "You earned the 5-point category bonus." : "This was actually a "+CATS[card.errorCategory].label+". Your Stage 1 tier points and streak are unchanged.",
       correct ? 1500 : 7000);
