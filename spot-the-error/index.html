@@ -206,9 +206,13 @@
   .work-body{display:flex; flex:1 1 auto; flex-direction:column; min-height:0; overflow:hidden;}
   .work-body > p{margin:8px 0;}
   .step-list{min-width:0; min-height:40px; flex:1 1 auto; overflow-y:auto; overscroll-behavior:contain; padding-right:2px;}
-  .play-explanation{grid-column:2; grid-row:3; min-height:0; overflow:hidden;}
+  .play-explanation{grid-column:2; grid-row:3; min-height:0; overflow:hidden; position:relative;}
   .play-explanation .explain{display:block; height:100%; margin:0; border:1px solid var(--rule); border-radius:10px; overflow-y:auto; overscroll-behavior:contain;}
   .play-explanation .explain-empty{display:flex; align-items:center; justify-content:center; text-align:center; color:var(--ink-soft); font-style:italic;}
+  .score-pops{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; pointer-events:none;}
+  .score-pop{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:1.3rem; line-height:1; letter-spacing:.02em; color:var(--wire); transform-origin:center; animation:scoreGrow var(--pop-dur,1500ms) linear var(--pop-delay,0ms) forwards;}
+  .score-pop--bonus{color:var(--chain); font-size:1.05rem;}
+  @keyframes scoreGrow{ from{transform:scale(1);} to{transform:scale(2);} }
   .task-line{margin:0 0 6px; font-weight:700;}
   .given-line{display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:8px; margin:0 0 6px; padding:6px 8px; background:var(--card-2); border:1px solid var(--rule); border-radius:6px;}
   .given-label{font-weight:700; white-space:nowrap;}
@@ -603,6 +607,18 @@
     var explanation = (state.feedback && !isMiss)
       ? '<div class="explain show"><b>'+esc(state.feedback.title)+'.</b> '+esc(state.feedback.detail)+'<br>'+card.explanation+'</div>'
       : '<div class="explain explain-empty">Feedback will appear here after you respond.</div>';
+    var scorePops = "";
+    if (state.feedback && state.feedback.scorePop){
+      var sp = state.feedback.scorePop;
+      var hold = state.feedback.holdMs || 1500;
+      var stagger = 175;
+      scorePops = '<div class="score-pops" aria-hidden="true">' +
+        '<span class="score-pop" style="--pop-dur:'+hold+'ms;">+'+sp.base+'</span>' +
+        (sp.bonus > 0
+          ? '<span class="score-pop score-pop--bonus" style="--pop-dur:'+(hold-stagger)+'ms; --pop-delay:'+stagger+'ms;">+'+sp.bonus+' BONUS</span>'
+          : '') +
+        '</div>';
+    }
     return '' +
       '<div class="play-shell">' +
       '<div class="play-header"><div class="hud">' +
@@ -621,7 +637,7 @@
       '</div></div>' +
       '<div class="play-pane play-pane-classify"><div class="card classify-card">'+classify+'</div></div>' +
       '</div>' +
-      '<div class="play-explanation">'+explanation+'</div>' +
+      '<div class="play-explanation">'+explanation+scorePops+'</div>' +
       '</div>';
   }
 
@@ -648,9 +664,9 @@
     finishItem(title, detail, 7000);
   }
 
-  function finishItem(title, detail, delay){
+  function finishItem(title, detail, delay, scorePop){
     state.answering = true;
-    state.feedback = {title:title, detail:detail};
+    state.feedback = {title:title, detail:detail, scorePop: scorePop || null, holdMs: delay};
     render();
     state.answerTimer = setTimeout(function(){
       state.answerTimer = null;
@@ -669,9 +685,9 @@
     var pickedClean = choice === "clean";
     if (card.errorStepIndex === null && pickedClean){
       state.icons.clean = "correct";
-      awardStageOneCorrect(card);
+      var cleanPop = awardStageOneCorrect(card);
       state.feedbackKind = "correct";
-      finishItem("Correct", "This item is clean — no step contains an error.", 1500);
+      finishItem("Correct", "This item is clean — no step contains an error.", 1500, cleanPop);
     } else if (card.errorStepIndex === null && !pickedClean){
       state.icons.steps[choice] = "wrong";
       resolveStageOneMiss(card, "Incorrect", "This item is clean — no step contains an error.");
@@ -700,7 +716,8 @@
     state.feedbackKind = correct ? "correct" : "stage2Miss";
     finishItem(correct ? "Correct category — +5 bonus" : "Category missed — no +5 bonus",
       correct ? "You earned the 5-point category bonus." : "This was actually a "+CATS[card.errorCategory].label+". Your Stage 1 tier points and streak are unchanged.",
-      correct ? 1500 : 7000);
+      correct ? 1500 : 7000,
+      correct ? {base:5, bonus:0} : null);
   }
 
   function finishRun(){
