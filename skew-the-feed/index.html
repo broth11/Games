@@ -134,6 +134,10 @@
   .stamp{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(22px,6vw,34px); text-transform:uppercase; letter-spacing:.02em; padding:10px 22px; border-radius:6px; border:4px solid currentColor; transform:rotate(-7deg); text-align:center; box-shadow:0 6px 18px rgba(0,0,0,0.25);}
   .stamp.correct{color:var(--wire); background:var(--wire-ink);}
   .stamp.wrong{color:var(--flag); background:var(--flag-ink);}
+  .score-pops{position:absolute; right:12px; bottom:12px; display:flex; flex-direction:column-reverse; align-items:flex-end; gap:6px; pointer-events:none; z-index:6;}
+  .score-pop{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:20px; line-height:1; letter-spacing:.02em; color:var(--wire); transform-origin:bottom right; animation:scoreGrow var(--pop-dur,1500ms) linear var(--pop-delay,0ms) forwards;}
+  .score-pop--bonus{color:var(--nonresp); font-size:15px;}
+  @keyframes scoreGrow{ from{transform:scale(1);} to{transform:scale(2);} }
   .verdicts{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:0;}
   @media (max-width:899px){
     .play-active .wrap{padding:10px 12px;}
@@ -499,6 +503,19 @@
       '</div>';
   }
 
+  // Grow-to-2x score pop, shown in the postcard corner on a correct call.
+  // The bonus pop starts `stagger` later and runs shorter so both land at
+  // full size the moment the hold ends.
+  function scorePopsHtml(base, bonus, holdMs){
+    var stagger = 175;
+    return '<div class="score-pops" aria-hidden="true">' +
+      '<span class="score-pop" style="--pop-dur:'+holdMs+'ms;">+'+base+'</span>' +
+      (bonus > 0
+        ? '<span class="score-pop score-pop--bonus" style="--pop-dur:'+(holdMs-stagger)+'ms; --pop-delay:'+stagger+'ms;">+'+bonus+' BONUS</span>'
+        : '') +
+      '</div>';
+  }
+
   function handleAnswer(cat){
     if (state.answering) return;
     var card = currentCard(); if (!card) return;
@@ -524,6 +541,10 @@
       correctBtn.classList.add("correct-glow");
       var explainEl = correctBtn.querySelector(".vexplain");
       if (explainEl) explainEl.innerHTML = card.why;
+    }
+    if (isCorrect){
+      var pc = document.getElementById("postcard");
+      if (pc) pc.insertAdjacentHTML("beforeend", scorePopsHtml(TIER_POINTS[card.tier], bonus, 1500));
     }
     pushPlayerProgress();
     clearTimeout(state.answerTimer);
