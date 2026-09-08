@@ -621,7 +621,7 @@
   function resolveStageOneMiss(card, title, detail){
     state.attempted += 1; state.streak = 0; recordMiss(card);
     pushPlayerProgress();
-    finishItem(title, detail, 5000);
+    finishItem(title, detail, 7000);
   }
 
   function finishItem(title, detail, delay){
@@ -646,7 +646,7 @@
     if (card.errorStepIndex === null && pickedClean){
       state.icons.clean = "correct";
       awardStageOneCorrect(card);
-      finishItem("Correct", "This item is clean — no step contains an error.", 3000);
+      finishItem("Correct", "This item is clean — no step contains an error.", 1500);
     } else if (card.errorStepIndex === null && !pickedClean){
       state.icons.steps[choice] = "wrong";
       resolveStageOneMiss(card, "Incorrect", "This item is clean — no step contains an error.");
@@ -674,7 +674,7 @@
     pushPlayerProgress();
     finishItem(correct ? "Correct category — +5 bonus" : "Category missed — no +5 bonus",
       correct ? "You earned the 5-point category bonus." : "This was actually a "+CATS[card.errorCategory].label+". Your Stage 1 tier points and streak are unchanged.",
-      correct ? 3000 : 5000);
+      correct ? 1500 : 7000);
   }
 
   function finishRun(){
