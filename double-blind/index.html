@@ -359,18 +359,20 @@ function submitBuild(card){
   if (wrong === 0){
     var pct = ATTEMPT_MULT[Math.min(state.attempt - 1, ATTEMPT_MULT.length - 1)];
     var pts = TIER_POINTS[card.tier] * pct;
-    state.score += pts;
     state.resolvedCount++;
     state.correctCount++;
+    var streakBonus = 0;
     if (state.attempt === 1){
       state.streak++;
       state.bestStreak = Math.max(state.bestStreak, state.streak);
+      streakBonus = state.streak >= 3 ? (state.streak - 2) * 5 : 0;
     } else {
       state.streak = 0;
     }
+    state.score += pts + streakBonus;
     state.resolved = true;
     slot.innerHTML = '<div class="verdict good"><span class="stamp-word">Accepted</span>' +
-      '<span class="detail">All ' + n + ' fields correct on attempt ' + state.attempt + '.<span class="points-earned mono">+' + pts + ' pts</span></span></div>';
+      '<span class="detail">All ' + n + ' fields correct on attempt ' + state.attempt + '.<span class="points-earned mono">+' + pts + ' pts' + (streakBonus ? ' · +' + streakBonus + ' streak' : '') + '</span></span></div>';
     document.getElementById("submitBtn").style.display = "none";
     document.getElementById("nextBtn").style.display = "block";
     renderMeta();
@@ -483,21 +485,23 @@ function answerReason(card, choiceIdx){
 
   var half = TIER_POINTS[card.tier] / 2;
   var pts = (pickCorrect ? half : 0) + (reasonCorrect ? half : 0);
-  state.score += pts;
   state.resolvedCount++;
 
   var cleanFirstTry = pickCorrect && reasonCorrect;
+  var streakBonus = 0;
   if (cleanFirstTry){
     state.correctCount++;
     state.streak++;
     state.bestStreak = Math.max(state.bestStreak, state.streak);
+    streakBonus = state.streak >= 3 ? (state.streak - 2) * 5 : 0;
   } else {
     state.streak = 0;
   }
+  state.score += pts + streakBonus;
 
   document.getElementById("explainSlot").innerHTML =
     '<div class="explain-box"><b>' + esc(card.correctPick) + ' was the stronger design.</b> ' + esc(card.explanation) +
-    '<div class="points-earned mono">+' + pts + ' pts (' + (pickCorrect ? "pick correct" : "pick wrong") + ', ' + (reasonCorrect ? "reasoning correct" : "reasoning wrong") + ')</div></div>';
+    '<div class="points-earned mono">+' + pts + ' pts (' + (pickCorrect ? "pick correct" : "pick wrong") + ', ' + (reasonCorrect ? "reasoning correct" : "reasoning wrong") + ')' + (streakBonus ? ' · +' + streakBonus + ' streak' : '') + '</div></div>';
 
   document.getElementById("nextBtn").style.display = "block";
   renderMeta();
@@ -539,7 +543,7 @@ function registerView(message){
   document.getElementById("joinBtn").onclick=joinGame;
 }
 function lobbyView(){
-  showGate('<div class="gate-card" style="text-align:center"><div class="mono" style="font-size:11px;color:var(--ink-soft)">'+esc(Engine.identity.displayName)+' · PERIOD '+esc(Engine.identity.period)+'</div><h1>Checked In</h1><p><span style="color:var(--accept)">●</span> Waiting for the teacher to open the next review round.</p><p>Build cards allow revision after a three-second lock. Showdowns allow one pick and one reason. Only a completely correct first attempt extends your streak.</p><button class="btn btn-quiet" id="switchBtn">Switch Game Code</button></div>');
+  showGate('<div class="gate-card" style="text-align:center"><div class="mono" style="font-size:11px;color:var(--ink-soft)">'+esc(Engine.identity.displayName)+' · PERIOD '+esc(Engine.identity.period)+'</div><h1>Checked In</h1><p><span style="color:var(--accept)">●</span> Waiting for the teacher to open the next review round.</p><p>Build cards allow revision after a three-second lock. Showdowns allow one pick and one reason. Only a completely correct first attempt extends your streak, and a streak of 3+ earns bonus points.</p><button class="btn btn-quiet" id="switchBtn">Switch Game Code</button></div>');
   document.getElementById("switchBtn").onclick=function(){ Engine.session.stopPolling(); state.gameCode=""; localStorage.removeItem("doubleblind_code"); registerView(""); };
   sendLobbyPresence();
 }
