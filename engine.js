@@ -132,9 +132,24 @@
     if (retireCode) body.retireCode = retireCode;
     return apiPost("createGame", body).then(function (res) {
       if (res && res.error === "code_exists") return createGame(retireCode);
-      if (res && res.ok) return code;
+      if (res && res.ok) return confirmCodeReadable(code, 3);
       throw new Error((res && res.error) || "create_failed");
     });
+  }
+
+  // After a successful createGame write, confirm the code is actually
+  // readable via getGame before handing it back to the caller. Apps
+  // Script + Sheets writes aren't always instantly visible to the very
+  // next separate request, so without this, the caller's first poll can
+  // land during that gap and wrongly conclude the code doesn't exist.
+  function confirmCodeReadable(code, attemptsLeft) {
+    return apiGet("getGame", { code: code }).then(function (game) {
+      if (game && game.exists) return code;
+      if (attemptsLeft <= 1) return code;
+      return new Promise(function (resolve) {
+        setTimeout(function () { resolve(confirmCodeReadable(code, attemptsLeft - 1)); }, 400);
+      });
+    }).catch(function () { return code; });
   }
 
   function checkCode(code) {
@@ -147,6 +162,7 @@
   // 1-2.5s). Each tick gets a rising sequence number; a response is
   // applied only if it's still the most recent request in flight.
   var pollSeq = 0;
+  var notFoundStreak = 0;
 
   // Guards against a poll response that reflects the server's state from
   // BEFORE a manual startRound/endRound write has landed. Without this, a
@@ -175,6 +191,7 @@
   // everyone to a new code" and say something more useful than generic.
   function startPolling(code, intervalMs, onUpdate) {
     stopPolling();
+    notFoundStreak = 0;
     var base = intervalMs || 2000;
     function tick() {
       var mySeq = ++pollSeq;
@@ -183,6 +200,12 @@
         var retired = !!(game && game.retired);
         var fetchedGame = (game && game.exists && !retired) ? game : null;
         if (isStaleAgainstLocal(fetchedGame, currentGame)) return;
+        if (!fetchedGame && !retired) {
+          notFoundStreak++;
+          if (notFoundStreak < 2) return;
+        } else {
+          notFoundStreak = 0;
+        }
         currentGame = fetchedGame;
         onUpdate(currentGame, { retired: retired });
       }).catch(function () { /* transient hiccup — next tick retries */ })

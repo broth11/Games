@@ -161,7 +161,9 @@
   var DEFAULT_MINUTES = 5;
   var SCORE_REFRESH_MS = 5000;
   var HOST_POLL_MS = 3000;   // the host writes state; it barely needs to read it
-  var HOST_MISS_LIMIT = 4;   // consecutive null polls before we accept the game is gone
+  // engine.js already suppresses the first isolated not-found response,
+  // so one surfaced miss here represents two consecutive backend misses.
+  var HOST_MISS_LIMIT = 1;
   var CLOCK_TICK_MS = 250;   // purely local — the clock never waits on a request
 
   // Tabulating screen: students finish a beat apart because each device
