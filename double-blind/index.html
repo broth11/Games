@@ -55,7 +55,7 @@
   .dot.current{background:var(--ink);}
 
   #app{flex:1 1 auto; min-height:0; display:flex;}
-  .folder{flex:1; display:flex; flex-direction:column; min-height:0; background:var(--card); border:1px solid var(--rule); border-radius:4px; box-shadow:var(--shadow); padding:16px 18px; overflow:hidden;}
+  .folder{flex:1; display:flex; flex-direction:column; min-height:0; background:var(--card); border:1px solid var(--rule); border-radius:4px; box-shadow:var(--shadow); padding:16px 18px; overflow:hidden; position:relative;}
 
   .folder-head{flex:none; margin-bottom:10px;}
   .kind-tag{display:inline-flex; align-items:center; gap:6px; font-family:"Space Mono",monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding:3px 9px; border-radius:20px; border:1px solid var(--rule); color:var(--ink-soft); margin-bottom:6px;}
@@ -93,6 +93,10 @@
   .verdict .stamp-word{font-family:"Fraunces",serif; font-weight:900; font-size:15px; text-transform:uppercase; transform:rotate(-3deg); flex:none;}
   .verdict .detail{font-size:12.5px; line-height:1.4;}
   .points-earned{font-family:"Space Mono",monospace; font-size:11.5px; margin-top:4px; display:block;}
+  .score-pops{position:absolute; right:12px; bottom:12px; display:flex; flex-direction:column-reverse; align-items:flex-end; gap:6px; pointer-events:none; z-index:6;}
+  .score-pop{font-family:"Fraunces",serif; font-weight:900; font-size:20px; line-height:1; color:var(--accept); transform-origin:bottom right; animation:scoreGrow var(--pop-dur,1200ms) linear var(--pop-delay,0ms) forwards;}
+  .score-pop--bonus{color:var(--revise); font-size:15px;}
+  @keyframes scoreGrow{ from{transform:scale(1);} to{transform:scale(2);} }
 
   /* ---- Showdown mode ---- */
   .ms-card{border:1.5px solid var(--rule); border-radius:4px; padding:12px 14px; background:var(--card); display:flex; flex-direction:column; gap:8px; position:relative; margin-bottom:12px;}
@@ -224,6 +228,7 @@ window.DoubleBlindDev={selfTest:randomizationSelfTest,buildDeck:buildDeck};
 var TIER_POINTS = {1:10, 2:15, 3:20};
 var ATTEMPT_MULT = [1, 0.65, 0.40, 0.20, 0.10];
 var LOCKOUT_MS = 3000;
+var SCORE_POP_MS = 1200;  // grow time for the score pop; it then holds at 2x until "Next" is clicked
 var POLL_MS = 1500, PROGRESS_FLUSH_MS = 5000, LOBBY_HEARTBEAT_MS = 10000;
 
 var state = {
@@ -345,6 +350,23 @@ function bindBuild(card){
   if (nb) nb.addEventListener("click", nextCard);
 }
 
+// Grow-to-2x score pop in the folder corner. No timed hold in this game —
+// it grows over SCORE_POP_MS then holds at 2x (animation-fill-mode:forwards)
+// until "Next" re-renders the card. Bonus pop starts later and runs shorter
+// so both reach full size together.
+function injectScorePops(base, bonus){
+  var folder = document.querySelector(".folder");
+  if (!folder) return;
+  var stagger = 175;
+  folder.insertAdjacentHTML("beforeend",
+    '<div class="score-pops" aria-hidden="true">' +
+    '<span class="score-pop" style="--pop-dur:' + SCORE_POP_MS + 'ms;">+' + base + '</span>' +
+    (bonus > 0
+      ? '<span class="score-pop score-pop--bonus" style="--pop-dur:' + (SCORE_POP_MS - stagger) + 'ms; --pop-delay:' + stagger + 'ms;">+' + bonus + ' BONUS</span>'
+      : '') +
+    '</div>');
+}
+
 function submitBuild(card){
   var selects = document.querySelectorAll('select[data-field]');
   var wrong = 0;
@@ -375,6 +397,7 @@ function submitBuild(card){
       '<span class="detail">All ' + n + ' fields correct on attempt ' + state.attempt + '.<span class="points-earned mono">+' + pts + ' pts' + (streakBonus ? ' · +' + streakBonus + ' streak' : '') + '</span></span></div>';
     document.getElementById("submitBtn").style.display = "none";
     document.getElementById("nextBtn").style.display = "block";
+    injectScorePops(pts, streakBonus);
     renderMeta();
     pushPlayerProgress();
   } else {
@@ -503,6 +526,7 @@ function answerReason(card, choiceIdx){
     '<div class="explain-box"><b>' + esc(card.correctPick) + ' was the stronger design.</b> ' + esc(card.explanation) +
     '<div class="points-earned mono">+' + pts + ' pts (' + (pickCorrect ? "pick correct" : "pick wrong") + ', ' + (reasonCorrect ? "reasoning correct" : "reasoning wrong") + ')' + (streakBonus ? ' · +' + streakBonus + ' streak' : '') + '</div></div>';
 
+  if (cleanFirstTry) injectScorePops(pts, streakBonus);
   document.getElementById("nextBtn").style.display = "block";
   renderMeta();
   pushPlayerProgress();
