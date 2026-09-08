@@ -283,6 +283,7 @@
   var POLL_MS = 1500;          // lobby / play poll cadence (engine adds jitter)
   var PROGRESS_FLUSH_MS = 5000; // coalesce live-score writes to protect the backend
   var LOBBY_HEARTBEAT_MS = 10000;
+  var STAGE_ONE_POP_MS = 1000;  // score-pop hold after correctly locating the error, before Stage 2 opens
 
   /* ---------------------------------------------------------------
      GROUP 2 PLACEHOLDER CONTENT
@@ -324,7 +325,7 @@
 
     deck: [], idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, attempted: 0, misses: {},
     secondsLeft: 0, timerId: null, answering: false, answerTimer: null, countdownHandle: null,
-    stage: "locate", feedback: null, feedbackKind: null, icons: {steps:{}, clean:"", categories:{}},
+    stage: "locate", feedback: null, feedbackKind: null, stageOnePop: null, icons: {steps:{}, clean:"", categories:{}},
 
     lbCache: [], lbLoaded: false
   };
@@ -539,7 +540,7 @@
   function beginLocalRound(){
     state.deck = buildDeck(); state.idx = 0; state.score = 0; state.streak = 0; state.bestStreak = 0;
     state.correct = 0; state.attempted = 0; state.misses = {}; state.answering = false;
-    state.stage = "locate"; state.feedback = null; state.feedbackKind = null; state.icons = {steps:{}, clean:"", categories:{}};
+    state.stage = "locate"; state.feedback = null; state.feedbackKind = null; state.stageOnePop = null; state.icons = {steps:{}, clean:"", categories:{}};
     state.screen = "play";
     pushPlayerProgress(true);
     render();
@@ -609,15 +610,9 @@
       : '<div class="explain explain-empty">Feedback will appear here after you respond.</div>';
     var scorePops = "";
     if (state.feedback && state.feedback.scorePop){
-      var sp = state.feedback.scorePop;
-      var hold = state.feedback.holdMs || 1500;
-      var stagger = 175;
-      scorePops = '<div class="score-pops" aria-hidden="true">' +
-        '<span class="score-pop" style="--pop-dur:'+hold+'ms;">+'+sp.base+'</span>' +
-        (sp.bonus > 0
-          ? '<span class="score-pop score-pop--bonus" style="--pop-dur:'+(hold-stagger)+'ms; --pop-delay:'+stagger+'ms;">+'+sp.bonus+' BONUS</span>'
-          : '') +
-        '</div>';
+      scorePops = scorePopsHtml(state.feedback.scorePop, state.feedback.holdMs || 1500);
+    } else if (state.stageOnePop){
+      scorePops = scorePopsHtml(state.stageOnePop, STAGE_ONE_POP_MS);
     }
     return '' +
       '<div class="play-shell">' +
@@ -678,6 +673,35 @@
     }, delay);
   }
 
+  // Shared markup for the grow-to-2x score pops. `holdMs` drives the base
+  // pop's duration; the bonus pop starts `stagger` later and runs shorter
+  // so both reach full size at the same instant the hold ends.
+  function scorePopsHtml(sp, holdMs){
+    var stagger = 175;
+    return '<div class="score-pops" aria-hidden="true">' +
+      '<span class="score-pop" style="--pop-dur:'+holdMs+'ms;">+'+sp.base+'</span>' +
+      (sp.bonus > 0
+        ? '<span class="score-pop score-pop--bonus" style="--pop-dur:'+(holdMs-stagger)+'ms; --pop-delay:'+stagger+'ms;">+'+sp.bonus+' BONUS</span>'
+        : '') +
+      '</div>';
+  }
+
+  // Correctly locating the error step: a short pop-only hold (no feedback
+  // text, no item advance), then Stage 2's classify UI opens on the SAME card.
+  function advanceToStageTwo(scorePop){
+    state.answering = true;
+    state.stageOnePop = scorePop || null;
+    render();
+    state.answerTimer = setTimeout(function(){
+      state.answerTimer = null;
+      if (state.screen !== "play") return;   // a force-end landed during the pop
+      state.stageOnePop = null;
+      state.answering = false;
+      state.stage = "classify";
+      render();
+    }, STAGE_ONE_POP_MS);
+  }
+
   function handleLocate(choice){
     if (state.answering || state.stage !== "locate") return;
     var card = currentCard(); if (!card) return;
@@ -696,8 +720,7 @@
       resolveStageOneMiss(card, "Incorrect", "The error is actually at Step "+(card.errorStepIndex + 1)+".");
     } else if (choice === card.errorStepIndex){
       state.icons.steps[choice] = "correct";
-      awardStageOneCorrect(card);
-      state.answering = false; state.stage = "classify"; render();
+      advanceToStageTwo(awardStageOneCorrect(card));
     } else {
       state.icons.steps[choice] = "wrong"; state.icons.steps[card.errorStepIndex] = "correct";
       resolveStageOneMiss(card, "Incorrect", "The error is actually at Step "+(card.errorStepIndex + 1)+".");
