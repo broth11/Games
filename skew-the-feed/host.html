@@ -243,7 +243,8 @@
       {key:"displayName", label:"Name"},
       {key:"period", label:"Period"},
       {key:"score", label:"Score", numeric:true},
-      {key:"streak", label:"Streak", numeric:true}
+      {key:"streak", label:"Streak", numeric:true},
+      {key:"bestStreak", label:"Best", numeric:true}
     ]);
   }
 
@@ -453,13 +454,17 @@
     var body;
     if (state.historyLoading) body = '<div class="lb-empty">Loading&hellip;</div>';
     else if (!state.historyRows.length) body = '<div class="lb-empty">No results in this view yet.</div>';
-    else body = '<div style="overflow-x:auto;"><table class="lb"><thead><tr><th>#</th><th>Name</th><th>Period</th><th>Code</th><th class="num">Round</th><th class="num">Score</th><th class="num">Acc.</th></tr></thead><tbody>' +
+    else body = '<div style="overflow-x:auto;"><table class="lb"><thead><tr><th>#</th><th>Name</th><th>Period</th><th>Code</th><th class="num">Round</th><th class="num">Score</th><th class="num">Best</th><th class="num">Correct</th><th class="num">Acc.</th></tr></thead><tbody>' +
       state.historyRows.map(function(r,i){
         var badgeCls = "rank-badge"+(i<3?" top":"");
+        var correctTotal = (r.correct!=null && r.attempted!=null) ? r.correct+"/"+r.attempted : "&mdash;";
         return '<tr><td><span class="'+badgeCls+'">'+(i+1)+'</span></td><td>'+esc(r.displayName)+'</td>' +
           '<td class="mono" style="color:var(--ink-soft); font-size:12px;">'+esc(r.period||"&mdash;")+'</td>' +
           '<td class="mono" style="color:var(--ink-soft); font-size:12px;">'+esc(r.code||"&mdash;")+'</td>' +
-          '<td class="num">'+r.round+'</td><td class="num">'+r.score+'</td><td class="num">'+(r.accuracy!=null?r.accuracy+'%':'&mdash;')+'</td></tr>';
+          '<td class="num">'+r.round+'</td><td class="num">'+r.score+'</td>' +
+          '<td class="num">'+(r.bestStreak==null?'&mdash;':r.bestStreak)+'</td>' +
+          '<td class="num">'+correctTotal+'</td>' +
+          '<td class="num">'+(r.accuracy!=null?r.accuracy+'%':'&mdash;')+'</td></tr>';
       }).join("") + '</tbody></table></div>';
     return '' +
       '<button class="backlink" id="historyBackBtn">&larr; Back to dashboard</button>' +
