@@ -81,7 +81,6 @@
   .btn:active{transform:scale(0.98);} .btn:disabled{opacity:.45; cursor:not-allowed;}
   .btn-flag{background:var(--flag); color:var(--flag-ink);}
   .btn-ghost{background:transparent; color:var(--ink); border:1.5px solid var(--rule);}
-  .skip-control{margin-top:10px; border-style:dashed; color:var(--flag); border-color:var(--flag); font-size:1rem;}
   .btn-row{display:flex; gap:10px; margin-top:14px;} .btn-row .btn{width:auto; flex:1;}
   .err{color:var(--flag); font-size:0.8125rem; margin-top:8px; min-height:16px;}
   .ticker{border-top:1px dashed var(--rule); margin-top:26px; padding-top:14px;}
@@ -578,7 +577,7 @@
       ? '<div class="late-note">Joined mid-round &mdash; you have '+mmss(state.joinedSeconds)+' left on the room clock.</div>'
       : '';
     var classify = state.stage === "classify"
-      ? '<p class="eyebrow">Stage 2</p><h2 class="section-title">Classify the slip</h2><div class="verdicts" id="verdictGrid">'+btns+'</div><button class="btn btn-ghost skip-control" id="skipCategoryBtn" '+(state.answering?"disabled":"")+'>Skip this item</button>'
+      ? '<p class="eyebrow">Stage 2</p><h2 class="section-title">Classify the slip</h2><div class="verdicts" id="verdictGrid">'+btns+'</div>'
       : '<div class="classify-placeholder">Stage 2 will appear here after you locate an error.</div>';
     var explanation = state.feedback
       ? '<div class="explain show"><b>'+esc(state.feedback.title)+'.</b> '+esc(state.feedback.detail)+'<br>'+card.explanation+'</div>'
@@ -597,8 +596,7 @@
       '<div class="play-pane play-pane-work"><div class="work-card'+(card.steps.length > 5 ? ' work-card--dense' : '')+'">' +
         '<div class="work-head"><div class="work-who"><div class="work-title">Worked derivative</div><div class="work-meta">'+esc(card.tier)+' tier</div></div></div>' +
         '<div class="work-body">'+task+given+'<p><b>Stage 1: Locate the error.</b> Tap the first incorrect step, or choose Clean.</p><div id="stepList" class="step-list">'+steps+'</div>' +
-          '<button class="btn btn-ghost'+(state.icons.clean === "correct" ? " correct-glow" : "")+'" id="cleanChoice" '+(state.answering || state.stage !== "locate"?"disabled":"")+'>Clean — No Error'+iconHtml(state.icons.clean)+'</button>' +
-          '<button class="btn btn-ghost skip-control" id="skipLocateBtn" '+(state.answering || state.stage !== "locate"?"disabled":"")+'>Skip this item</button></div>' +
+          '<button class="btn btn-ghost'+(state.icons.clean === "correct" ? " correct-glow" : "")+'" id="cleanChoice" '+(state.answering || state.stage !== "locate"?"disabled":"")+'>Clean — No Error'+iconHtml(state.icons.clean)+'</button></div>' +
       '</div></div>' +
       '<div class="play-pane play-pane-classify"><div class="card classify-card">'+classify+'</div></div>' +
       '</div>' +
@@ -677,24 +675,6 @@
     finishItem(correct ? "Correct category — +5 bonus" : "Category missed — no +5 bonus",
       correct ? "You earned the 5-point category bonus." : "This was actually a "+CATS[card.errorCategory].label+". Your Stage 1 tier points and streak are unchanged.",
       correct ? 3000 : 5000);
-  }
-
-  function handleSkip(){
-    if (state.answering) return;
-    var card = currentCard(); if (!card) return;
-    if (state.stage === "locate"){
-      if (card.errorStepIndex === null){
-        state.icons.clean = "correct";
-        resolveStageOneMiss(card, "Incorrect", "This item is clean — no step contains an error.");
-      } else {
-        state.icons.steps[card.errorStepIndex] = "correct";
-        resolveStageOneMiss(card, "Incorrect", "The error is actually at Step "+(card.errorStepIndex + 1)+".");
-      }
-    } else if (state.stage === "classify"){
-      state.icons.categories[card.errorCategory] = "correct";
-      recordMiss(card); pushPlayerProgress();
-      finishItem("Category skipped — no +5 bonus", "This was actually a "+CATS[card.errorCategory].label+". Your Stage 1 tier points and streak are unchanged.", 5000);
-    }
   }
 
   function finishRun(){
@@ -877,9 +857,7 @@
     if ((el = document.getElementById("goBtn"))) el.addEventListener("click", function(){ state.screen="lobby"; render(); });
     if ((el = document.getElementById("stepList"))) el.addEventListener("click", function(e){ var btn=e.target.closest(".step-choice"); if(btn) handleLocate(parseInt(btn.getAttribute("data-step-index"), 10)); });
     if ((el = document.getElementById("cleanChoice"))) el.addEventListener("click", function(){ handleLocate("clean"); });
-    if ((el = document.getElementById("skipLocateBtn"))) el.addEventListener("click", handleSkip);
     if ((el = document.getElementById("verdictGrid"))) el.addEventListener("click", function(e){ var btn=e.target.closest(".verdict-btn"); if(btn) handleCategory(btn.getAttribute("data-cat")); });
-    if ((el = document.getElementById("skipCategoryBtn"))) el.addEventListener("click", handleSkip);
     if ((el = document.getElementById("againBtn"))) el.addEventListener("click", function(){ state.screen="lobby"; render(); });
     if ((el = document.getElementById("lbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; render(); });
     if ((el = document.getElementById("backBtn"))) el.addEventListener("click", function(){ state.screen = state.gameCode ? "lobby" : "register"; render(); });
