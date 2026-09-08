@@ -634,9 +634,11 @@
     var points = TIER_POINTS[card.tier];
     state.attempted += 1; state.correct += 1; state.streak += 1;
     state.bestStreak = Math.max(state.bestStreak, state.streak);
+    var bonus = state.streak >= 3 ? (state.streak-2)*5 : 0;
     if (state.streak >= 3) points += (state.streak-2)*5;
     state.score += points;
     pushPlayerProgress();
+    return {base: TIER_POINTS[card.tier], bonus: bonus};
   }
 
   function resolveStageOneMiss(card, title, detail){
