@@ -38,6 +38,7 @@
   .kicker{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;}
   .nameplate{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(34px,7vw,52px); line-height:0.9; letter-spacing:0.01em; text-transform:uppercase; text-wrap:balance; margin:0;}
   .nameplate em{font-style:normal; color:var(--flag);}
+  .brand-logo{display:block; margin:0 auto; width:100%; max-width:230px; height:auto;}
   .dateline{display:flex; justify-content:space-between; align-items:center; border-top:2px solid var(--ink); border-bottom:1px solid var(--rule); padding:6px 2px; margin-top:10px; font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft);}
   .card{background:var(--card); border:1px solid var(--rule); border-radius:3px; box-shadow:var(--shadow); padding:20px 20px 22px;}
   .stack > * + *{margin-top:16px;}
@@ -193,7 +194,7 @@
 
   function masthead(kicker){
     return '<div class="masthead"><div class="kicker">'+esc(kicker||"AP STATISTICS · UNIT 1 FIELD EXERCISE")+'</div>' +
-      '<h1 class="nameplate">The <em>News</em> Desk</h1></div>';
+      '<img class="brand-logo" src="logo.png" alt="Skew the Feed" /></div>';
   }
 
   function render(){
