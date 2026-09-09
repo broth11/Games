@@ -193,8 +193,7 @@
 
   function masthead(kicker){
     return '<div class="masthead"><div class="kicker">'+esc(kicker||"AP STATISTICS · UNIT 1 FIELD EXERCISE")+'</div>' +
-      '<h1 class="nameplate">The <em>News</em> Desk</h1>' +
-      '<div class="dateline"><span>Skew the Feed &mdash; Host</span><span>Front of Room</span></div></div>';
+      '<h1 class="nameplate">The <em>News</em> Desk</h1></div>';
   }
 
   function render(){
@@ -293,7 +292,6 @@
         '<button class="btn btn-flag" id="hostStartBtn" style="margin-top:16px;" '+(running?"disabled":"")+'>'+(phase==="ended"?"Start Next Round":"Start Round")+'</button>' +
         '<button class="btn btn-ghost" id="hostEndBtn" style="margin-top:10px; display:'+(running?"block":"none")+';">End Round Now</button>' +
         (phase==="ended" ? '<button class="btn btn-ghost" id="showResultsBtn" style="margin-top:10px;">Show Round Results</button>' : '') +
-        '<p class="host-note">Every device gets its own 5-second countdown the moment it hears the round start, then the full time you set. Anyone joining after that gets whatever time is left on this clock.</p>' +
         '<div class="host-utility-links">' +
           '<button class="link-quiet" id="historyBtn" style="display:block; margin:0 auto;"><i class="fa-solid fa-square-poll-vertical" aria-hidden="true"></i>View history (this round · this game · all games)</button>' +
           '<button class="link-quiet" id="newGameToggle" style="display:block; margin:8px auto 0;"><i class="fa-solid fa-square-binary" aria-hidden="true"></i>Start a different game (new code)</button>' +
