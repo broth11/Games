@@ -6,23 +6,23 @@
 <title>Double Blind — Peer Review Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,900&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Cormorant:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --paper:#F1ECE1; --card:#FBF8F1; --card-2:#EAE2D2; --ink:#211D18; --ink-soft:#6B6154;
-    --rule:#D9CFBB; --focus:#345170;
-    --accept:#3D6B4F; --accept-ink:#E9F1EC;
-    --revise:#B8863B; --revise-ink:#F7EEDD;
-    --reject:#8C2F2F; --reject-ink:#F8E9E7;
-    --shadow: 0 1px 0 rgba(33,29,24,0.05), 0 10px 24px -16px rgba(33,29,24,0.35);
+    --paper:#FFFFFF; --card:#FFFFFF; --card-2:#F1F1F1; --ink:#121212; --ink-soft:#5C5C5C;
+    --rule:#D6D6D6; --focus:#121212; --flag:#D8433E;
+    --accept:#121212; --accept-ink:#EDEDED;
+    --revise:#8C2F2F; --revise-ink:#E9E2E1;
+    --reject:#D8433E; --reject-ink:#FBEAE9;
+    --shadow: 0 1px 0 rgba(0,0,0,0.05), 0 10px 24px -16px rgba(0,0,0,0.35);
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --paper:#1B1815; --card:#242019; --card-2:#2D2820; --ink:#EFE9DD; --ink-soft:#A89C86;
-      --rule:#463F31; --focus:#7FA6C9;
-      --accept:#5EA37B; --accept-ink:#16241C;
-      --revise:#D9A24E; --revise-ink:#2B2213;
-      --reject:#D97C6E; --reject-ink:#2B1815;
+      --paper:#0A0A0A; --card:#161616; --card-2:#212121; --ink:#F2F2F2; --ink-soft:#A6A6A6;
+      --rule:#333333; --focus:#F2F2F2; --flag:#E8615C;
+      --accept:#F2F2F2; --accept-ink:#262626;
+      --revise:#C97268; --revise-ink:#2B1815;
+      --reject:#E8615C; --reject-ink:#2A1210;
       --shadow: 0 1px 0 rgba(0,0,0,0.4), 0 14px 28px -16px rgba(0,0,0,0.6);
     }
   }
@@ -30,10 +30,10 @@
   html,body{margin:0;padding:0;height:100%;}
   body{
     background: var(--paper); color:var(--ink);
-    font-family:"Inter",-apple-system,system-ui,sans-serif; -webkit-font-smoothing:antialiased;
+    font-family:"IBM Plex Sans",-apple-system,system-ui,sans-serif; -webkit-font-smoothing:antialiased;
   }
-  .serif{font-family:"Fraunces",Georgia,serif;}
-  .mono{font-family:"Space Mono","SF Mono",monospace;}
+  .serif{font-family:"Cormorant",Georgia,serif;}
+  .mono{font-family:"IBM Plex Mono","SF Mono",monospace;}
   a{color:inherit;} button{font-family:inherit;}
   :focus-visible{outline:3px solid var(--focus); outline-offset:2px;}
   @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
@@ -42,11 +42,11 @@
 
   .topbar{display:flex; align-items:baseline; justify-content:space-between; gap:12px; border-bottom:2px solid var(--ink); padding-bottom:10px; flex:none;}
   .brand{display:flex; flex-direction:column; gap:2px;}
-  .brand .name{font-family:"Fraunces",serif; font-weight:700; font-size:20px; letter-spacing:0.01em;}
+  .brand .name{font-family:"Cormorant",serif; font-weight:600; font-size:22px; letter-spacing:0.01em;}
   .brand .sub{font-size:11.5px; color:var(--ink-soft);}
   .meta{display:flex; gap:16px; font-size:13px;}
   .meta div{text-align:right;}
-  .meta .n{font-family:"Space Mono",monospace; font-weight:700; font-size:16px; display:block;}
+  .meta .n{font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:16px; display:block;}
   .meta .l{color:var(--ink-soft); font-size:10.5px;}
 
   .progress-dots{display:flex; gap:6px; margin:10px 0 12px; flex:none;}
@@ -55,31 +55,31 @@
   .dot.current{background:var(--ink);}
 
   #app{flex:1 1 auto; min-height:0; display:flex;}
-  .folder{flex:1; display:flex; flex-direction:column; min-height:0; background:var(--card); border:1px solid var(--rule); border-radius:4px; box-shadow:var(--shadow); padding:16px 18px; overflow:hidden; position:relative;}
+  .folder{flex:1; display:flex; flex-direction:column; min-height:0; background:var(--card); border:1px solid var(--rule); border-radius:4px; box-shadow:var(--shadow); padding:16px 18px; overflow:hidden;}
 
   .folder-head{flex:none; margin-bottom:10px;}
-  .kind-tag{display:inline-flex; align-items:center; gap:6px; font-family:"Space Mono",monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding:3px 9px; border-radius:20px; border:1px solid var(--rule); color:var(--ink-soft); margin-bottom:6px;}
-  .kind-tag.build{border-color:#8a9a7f;}
-  .kind-tag.showdown{border-color:#a68a6b;}
-  h2.title{font-family:"Fraunces",serif; font-weight:600; font-size:18px; margin:0; line-height:1.25;}
+  .kind-tag{display:inline-flex; align-items:center; gap:6px; font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding:3px 9px; border-radius:20px; border:1px solid var(--rule); color:var(--ink-soft); margin-bottom:6px;}
+  .kind-tag.build{border-color:var(--ink-soft);}
+  .kind-tag.showdown{border-color:var(--flag);}
+  h2.title{font-family:"Big Shoulders Display",sans-serif; font-weight:800; font-size:18px; margin:0; line-height:1.25; text-transform:uppercase; letter-spacing:.01em;}
   p.subquestion{font-size:14px; color:var(--ink-soft); margin:4px 0 0; line-height:1.4;}
 
   .split{flex:1; min-height:0; display:grid; grid-template-columns:0.85fr 1.15fr; gap:14px;}
   .pane{min-height:0; overflow-y:auto; border:1px solid var(--rule); border-radius:4px; padding:14px 16px; background:var(--card-2); display:flex; flex-direction:column;}
-  .pane-label{flex:none; font-family:"Space Mono",monospace; font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px;}
+  .pane-label{flex:none; font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px;}
 
   /* ---- Build mode ---- */
   p.scenario{font-size:14.5px; line-height:1.6; color:var(--ink); margin:0;}
 
   .field-grid{display:flex; flex-direction:column; gap:7px; flex:none;}
   .field-row{display:grid; grid-template-columns:128px 1fr; gap:8px; align-items:center;}
-  .field-row .field-id{font-family:"Inter",sans-serif; font-size:11.5px; font-weight:600; line-height:1.25; color:var(--ink-soft);}
-  select{width:100%; padding:8px 9px; border-radius:3px; border:1.5px solid var(--rule); background:var(--card); color:var(--ink); font-size:13px; font-family:"Inter",sans-serif;}
+  .field-row .field-id{font-family:"IBM Plex Sans",sans-serif; font-size:11.5px; font-weight:600; line-height:1.25; color:var(--ink-soft);}
+  select{width:100%; padding:8px 9px; border-radius:3px; border:1.5px solid var(--rule); background:var(--card); color:var(--ink); font-size:13px; font-family:"IBM Plex Sans",sans-serif;}
   select:focus{border-color:var(--focus);}
 
   .status-row{flex:none; display:flex; justify-content:space-between; gap:10px; font-size:11.5px; margin-top:8px; min-height:15px;}
   .attempt-note{color:var(--ink-soft);}
-  .lockout-note{font-family:"Space Mono",monospace; color:var(--revise); text-align:right;}
+  .lockout-note{font-family:"IBM Plex Mono",monospace; color:var(--revise); text-align:right;}
 
   .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 18px; border-radius:3px; border:none; cursor:pointer; font-weight:600; font-size:14px; background:var(--ink); color:var(--paper); transition:transform .08s ease, opacity .15s; flex:none;}
   .btn:active{transform:scale(0.98);} .btn:disabled{opacity:.4; cursor:not-allowed;}
@@ -90,22 +90,18 @@
   .verdict.good{background:var(--accept-ink); color:var(--accept);}
   .verdict.mid{background:var(--revise-ink); color:var(--revise);}
   .verdict.bad{background:var(--reject-ink); color:var(--reject);}
-  .verdict .stamp-word{font-family:"Fraunces",serif; font-weight:900; font-size:15px; text-transform:uppercase; transform:rotate(-3deg); flex:none;}
+  .verdict .stamp-word{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:15px; text-transform:uppercase; transform:rotate(-3deg); flex:none;}
   .verdict .detail{font-size:12.5px; line-height:1.4;}
-  .points-earned{font-family:"Space Mono",monospace; font-size:11.5px; margin-top:4px; display:block;}
-  .score-pops{position:absolute; right:12px; bottom:12px; display:flex; flex-direction:column-reverse; align-items:flex-end; gap:6px; pointer-events:none; z-index:6;}
-  .score-pop{font-family:"Fraunces",serif; font-weight:900; font-size:20px; line-height:1; color:var(--accept); transform-origin:bottom right; animation:scoreGrow var(--pop-dur,1200ms) linear var(--pop-delay,0ms) forwards;}
-  .score-pop--bonus{color:var(--revise); font-size:15px;}
-  @keyframes scoreGrow{ from{transform:scale(1);} to{transform:scale(2);} }
+  .points-earned{font-family:"IBM Plex Mono",monospace; font-size:11.5px; margin-top:4px; display:block;}
 
   /* ---- Showdown mode ---- */
   .ms-card{border:1.5px solid var(--rule); border-radius:4px; padding:12px 14px; background:var(--card); display:flex; flex-direction:column; gap:8px; position:relative; margin-bottom:12px;}
   .ms-card:last-of-type{margin-bottom:0;}
   .ms-card.picked-good{border-color:var(--accept);}
   .ms-card.picked-bad{border-color:var(--reject);}
-  .ms-label{font-family:"Space Mono",monospace; font-size:10.5px; letter-spacing:.08em; color:var(--ink-soft);}
+  .ms-label{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.08em; color:var(--ink-soft);}
   .ms-text{font-size:13.5px; line-height:1.5; margin:0;}
-  .ms-stamp{position:absolute; top:9px; right:9px; font-family:"Fraunces",serif; font-weight:900; font-size:10.5px; text-transform:uppercase; padding:3px 8px; border-radius:20px; transform:rotate(-4deg);}
+  .ms-stamp{position:absolute; top:9px; right:9px; font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:10.5px; text-transform:uppercase; padding:3px 8px; border-radius:20px; transform:rotate(-4deg);}
   .ms-stamp.good{background:var(--accept-ink); color:var(--accept);}
   .ms-stamp.bad{background:var(--reject-ink); color:var(--reject);}
 
@@ -120,29 +116,30 @@
   .explain-box b{color:var(--ink);}
 
   .summary{margin:auto; text-align:center; padding:20px;}
-  .summary .big{font-family:"Fraunces",serif; font-weight:900; font-size:52px; color:var(--accept); line-height:1;}
+  .summary .big{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:52px; color:var(--accept); line-height:1;}
   .summary .cap{font-size:13px; color:var(--ink-soft); margin-top:6px;}
   .stat-row{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin:20px 0;}
   .stat-tile{background:var(--card-2); border:1px solid var(--rule); border-radius:5px; padding:12px 8px;}
-  .stat-tile .n{font-family:"Space Mono",monospace; font-weight:700; font-size:20px; display:block;}
+  .stat-tile .n{font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:20px; display:block;}
   .stat-tile .l{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em;}
   .gate{position:fixed; inset:0; z-index:20; overflow:auto; background:var(--paper); padding:24px 18px;}
   .gate-card{max-width:620px; margin:5vh auto; background:var(--card); border:1px solid var(--rule); border-radius:6px; box-shadow:var(--shadow); padding:24px;}
-  .gate h1{font-family:"Fraunces",serif; font-size:42px; margin:4px 0; color:var(--accept);}
+  .gate h1{font-family:"Cormorant",serif; font-weight:600; font-size:42px; margin:4px 0; color:var(--accept);}
+  .brand-logo{display:block; margin:6px auto 4px; width:100%; max-width:280px; height:auto;}
   .gate label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin:14px 0 5px;}
   .gate input{width:100%; padding:12px; border:1.5px solid var(--rule); border-radius:3px; background:var(--card-2); color:var(--ink);}
-  .code-input{text-transform:uppercase; text-align:center; letter-spacing:.3em; font-family:"Space Mono",monospace; font-size:21px;}
+  .code-input{text-transform:uppercase; text-align:center; letter-spacing:.3em; font-family:"IBM Plex Mono",monospace; font-size:21px;}
   .gate-error{min-height:20px; color:var(--reject); font-size:13px; margin-top:8px;}
   .gate-note{text-align:center; color:var(--ink-soft); font-size:13px;}
   .timer-meta{min-width:74px;}
   .credit{position:fixed; z-index:30; left:8px; right:8px; bottom:2px; text-align:center; color:var(--ink-soft); font-size:9.5px; line-height:1.35; margin:0 auto; max-width:920px; background:color-mix(in srgb,var(--paper) 92%,transparent);}
-  .mask{position:fixed; inset:0; z-index:80; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; background:#12100E; color:#F6F1E4; animation:maskIn .25s ease-out;}
+  .mask{position:fixed; inset:0; z-index:80; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; background:#0A0A0A; color:#F5F5F5; animation:maskIn .25s ease-out;}
   @keyframes maskIn{from{opacity:0}to{opacity:1}}
-  .mask-kicker{font-family:"Space Mono",monospace; font-size:13px; letter-spacing:.2em; text-transform:uppercase; opacity:.7;}
-  .mask-num{font-family:"Fraunces",serif; font-weight:900; font-size:clamp(110px,34vw,240px); line-height:1; color:#5EA37B;}
+  .mask-kicker{font-family:"IBM Plex Mono",monospace; font-size:13px; letter-spacing:.2em; text-transform:uppercase; opacity:.7;}
+  .mask-num{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(110px,34vw,240px); line-height:1; color:var(--flag);}
   .mask-num.pop{animation:countPop .55s cubic-bezier(.2,.8,.3,1);}
   @keyframes countPop{0%{transform:scale(1.7);opacity:0}45%,100%{transform:scale(1);opacity:1}}
-  .mask-sub{font-family:"Space Mono",monospace; font-size:13px; opacity:.55; max-width:320px; text-align:center;}
+  .mask-sub{font-family:"IBM Plex Mono",monospace; font-size:13px; opacity:.55; max-width:320px; text-align:center;}
 
   @media (max-width:720px){
     .wrap{height:auto; min-height:100vh;}
@@ -228,7 +225,6 @@ window.DoubleBlindDev={selfTest:randomizationSelfTest,buildDeck:buildDeck};
 var TIER_POINTS = {1:10, 2:15, 3:20};
 var ATTEMPT_MULT = [1, 0.65, 0.40, 0.20, 0.10];
 var LOCKOUT_MS = 3000;
-var SCORE_POP_MS = 1200;  // grow time for the score pop; it then holds at 2x until "Next" is clicked
 var POLL_MS = 1500, PROGRESS_FLUSH_MS = 5000, LOBBY_HEARTBEAT_MS = 10000;
 
 var state = {
@@ -350,23 +346,6 @@ function bindBuild(card){
   if (nb) nb.addEventListener("click", nextCard);
 }
 
-// Grow-to-2x score pop in the folder corner. No timed hold in this game —
-// it grows over SCORE_POP_MS then holds at 2x (animation-fill-mode:forwards)
-// until "Next" re-renders the card. Bonus pop starts later and runs shorter
-// so both reach full size together.
-function injectScorePops(base, bonus){
-  var folder = document.querySelector(".folder");
-  if (!folder) return;
-  var stagger = 175;
-  folder.insertAdjacentHTML("beforeend",
-    '<div class="score-pops" aria-hidden="true">' +
-    '<span class="score-pop" style="--pop-dur:' + SCORE_POP_MS + 'ms;">+' + base + '</span>' +
-    (bonus > 0
-      ? '<span class="score-pop score-pop--bonus" style="--pop-dur:' + (SCORE_POP_MS - stagger) + 'ms; --pop-delay:' + stagger + 'ms;">+' + bonus + ' BONUS</span>'
-      : '') +
-    '</div>');
-}
-
 function submitBuild(card){
   var selects = document.querySelectorAll('select[data-field]');
   var wrong = 0;
@@ -381,23 +360,20 @@ function submitBuild(card){
   if (wrong === 0){
     var pct = ATTEMPT_MULT[Math.min(state.attempt - 1, ATTEMPT_MULT.length - 1)];
     var pts = TIER_POINTS[card.tier] * pct;
+    state.score += pts;
     state.resolvedCount++;
     state.correctCount++;
-    var streakBonus = 0;
     if (state.attempt === 1){
       state.streak++;
       state.bestStreak = Math.max(state.bestStreak, state.streak);
-      streakBonus = state.streak >= 3 ? (state.streak - 2) * 5 : 0;
     } else {
       state.streak = 0;
     }
-    state.score += pts + streakBonus;
     state.resolved = true;
     slot.innerHTML = '<div class="verdict good"><span class="stamp-word">Accepted</span>' +
-      '<span class="detail">All ' + n + ' fields correct on attempt ' + state.attempt + '.<span class="points-earned mono">+' + pts + ' pts' + (streakBonus ? ' · +' + streakBonus + ' streak' : '') + '</span></span></div>';
+      '<span class="detail">All ' + n + ' fields correct on attempt ' + state.attempt + '.<span class="points-earned mono">+' + pts + ' pts</span></span></div>';
     document.getElementById("submitBtn").style.display = "none";
     document.getElementById("nextBtn").style.display = "block";
-    injectScorePops(pts, streakBonus);
     renderMeta();
     pushPlayerProgress();
   } else {
@@ -508,25 +484,22 @@ function answerReason(card, choiceIdx){
 
   var half = TIER_POINTS[card.tier] / 2;
   var pts = (pickCorrect ? half : 0) + (reasonCorrect ? half : 0);
+  state.score += pts;
   state.resolvedCount++;
 
   var cleanFirstTry = pickCorrect && reasonCorrect;
-  var streakBonus = 0;
   if (cleanFirstTry){
     state.correctCount++;
     state.streak++;
     state.bestStreak = Math.max(state.bestStreak, state.streak);
-    streakBonus = state.streak >= 3 ? (state.streak - 2) * 5 : 0;
   } else {
     state.streak = 0;
   }
-  state.score += pts + streakBonus;
 
   document.getElementById("explainSlot").innerHTML =
     '<div class="explain-box"><b>' + esc(card.correctPick) + ' was the stronger design.</b> ' + esc(card.explanation) +
-    '<div class="points-earned mono">+' + pts + ' pts (' + (pickCorrect ? "pick correct" : "pick wrong") + ', ' + (reasonCorrect ? "reasoning correct" : "reasoning wrong") + ')' + (streakBonus ? ' · +' + streakBonus + ' streak' : '') + '</div></div>';
+    '<div class="points-earned mono">+' + pts + ' pts (' + (pickCorrect ? "pick correct" : "pick wrong") + ', ' + (reasonCorrect ? "reasoning correct" : "reasoning wrong") + ')</div></div>';
 
-  if (cleanFirstTry) injectScorePops(pts, streakBonus);
   document.getElementById("nextBtn").style.display = "block";
   renderMeta();
   pushPlayerProgress();
@@ -563,11 +536,11 @@ function mmss(sec){ var m=Math.floor(sec/60),s=sec%60; return m+":"+(s<10?"0":""
 function showGate(html){ var gate=document.getElementById("gate"); gate.style.display="block"; gate.innerHTML=html; }
 function hideGate(){ document.getElementById("gate").style.display="none"; }
 function registerView(message){
-  showGate('<div class="gate-card"><div class="mono" style="font-size:11px;color:var(--ink-soft)">AP STATISTICS · PEER REVIEW DESK</div><h1>Double Blind</h1><p>Complete methodologies and compare submissions under the room clock.</p><label>Game code</label><input id="codeInput" class="code-input" maxlength="6" value="'+esc(state.gameCode)+'"><label>Student ID</label><input id="idInput" inputmode="numeric" maxlength="10" value="'+esc(Engine.identity.studentId)+'"><div class="gate-error" id="joinError">'+esc(message||"")+'</div><button class="btn btn-wide" id="joinBtn">Begin Review Session</button></div>');
+  showGate('<div class="gate-card"><div class="mono" style="font-size:11px;color:var(--ink-soft)">AP STATISTICS · PEER REVIEW DESK</div><img class="brand-logo" src="logo.png" alt="Double Blind" /><p>Complete methodologies and compare submissions under the room clock.</p><label>Game code</label><input id="codeInput" class="code-input" maxlength="6" value="'+esc(state.gameCode)+'"><label>Student ID</label><input id="idInput" inputmode="numeric" maxlength="10" value="'+esc(Engine.identity.studentId)+'"><div class="gate-error" id="joinError">'+esc(message||"")+'</div><button class="btn btn-wide" id="joinBtn">Begin Review Session</button></div>');
   document.getElementById("joinBtn").onclick=joinGame;
 }
 function lobbyView(){
-  showGate('<div class="gate-card" style="text-align:center"><div class="mono" style="font-size:11px;color:var(--ink-soft)">'+esc(Engine.identity.displayName)+' · PERIOD '+esc(Engine.identity.period)+'</div><h1>Checked In</h1><p><span style="color:var(--accept)">●</span> Waiting for the teacher to open the next review round.</p><p>Build cards allow revision after a three-second lock. Showdowns allow one pick and one reason. Only a completely correct first attempt extends your streak, and a streak of 3+ earns bonus points.</p><button class="btn btn-quiet" id="switchBtn">Switch Game Code</button></div>');
+  showGate('<div class="gate-card" style="text-align:center"><div class="mono" style="font-size:11px;color:var(--ink-soft)">'+esc(Engine.identity.displayName)+' · PERIOD '+esc(Engine.identity.period)+'</div><h1>Checked In</h1><p><span style="color:var(--accept)">●</span> Waiting for the teacher to open the next review round.</p><p>Build cards allow revision after a three-second lock. Showdowns allow one pick and one reason. Only a completely correct first attempt extends your streak.</p><button class="btn btn-quiet" id="switchBtn">Switch Game Code</button></div>');
   document.getElementById("switchBtn").onclick=function(){ Engine.session.stopPolling(); state.gameCode=""; localStorage.removeItem("doubleblind_code"); registerView(""); };
   sendLobbyPresence();
 }
