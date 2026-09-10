@@ -538,6 +538,11 @@ function hideGate(){ document.getElementById("gate").style.display="none"; }
 function registerView(message){
   showGate('<div class="gate-card"><div class="mono" style="font-size:11px;color:var(--ink-soft)">AP STATISTICS · PEER REVIEW DESK</div><img class="brand-logo" src="logo.png" alt="Double Blind" /><p>Complete methodologies and compare submissions under the room clock.</p><label>Game code</label><input id="codeInput" class="code-input" maxlength="6" value="'+esc(state.gameCode)+'"><label>Student ID</label><input id="idInput" inputmode="numeric" maxlength="10" value="'+esc(Engine.identity.studentId)+'"><div class="gate-error" id="joinError">'+esc(message||"")+'</div><button class="btn btn-wide" id="joinBtn">Begin Review Session</button></div>');
   document.getElementById("joinBtn").onclick=joinGame;
+  Engine.ui.bindEnterFlow(
+    document.getElementById("codeInput"),
+    document.getElementById("idInput"),
+    function(){ document.getElementById("joinBtn").click(); }
+  );
 }
 function lobbyView(){
   showGate('<div class="gate-card" style="text-align:center"><div class="mono" style="font-size:11px;color:var(--ink-soft)">'+esc(Engine.identity.displayName)+' · PERIOD '+esc(Engine.identity.period)+'</div><h1>Checked In</h1><p><span style="color:var(--accept)">●</span> Waiting for the teacher to open the next review round.</p><p>Build cards allow revision after a three-second lock. Showdowns allow one pick and one reason. Only a completely correct first attempt extends your streak.</p><button class="btn btn-quiet" id="switchBtn">Switch Game Code</button></div>');

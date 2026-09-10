@@ -485,6 +485,29 @@
     el.classList.add("pop");
   }
 
+  // Enter-key flow for a two-field "game code + student ID" sign-in screen,
+  // shared so every game wires it up in one line. On Enter in EITHER field:
+  //   - code filled, ID empty  -> move focus to the ID field
+  //   - ID filled, code empty   -> move focus to the code field
+  //   - both filled             -> onSubmit() (the same path the button click uses)
+  //   - both empty              -> nothing
+  // Never clears, resets, or re-renders either field's existing value.
+  function bindEnterFlow(codeEl, idEl, onSubmit) {
+    if (!codeEl || !idEl || typeof onSubmit !== "function") return;
+    function handler(e) {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      var codeFilled = codeEl.value.trim() !== "";
+      var idFilled = idEl.value.trim() !== "";
+      if (codeFilled && idFilled) onSubmit();
+      else if (codeFilled) idEl.focus();
+      else if (idFilled) codeEl.focus();
+      // both empty: do nothing
+    }
+    codeEl.addEventListener("keydown", handler);
+    idEl.addEventListener("keydown", handler);
+  }
+
   function scoreboardTableHtml(rows, columns) {
     if (!rows || !rows.length) return '<div class="lb-empty">No scores reported yet.</div>';
     var head = '<th>#</th>' + columns.map(function (c) {
@@ -530,6 +553,6 @@
     },
     leaderboard: { get: getLeaderboard },
     audio: { playFor: playFor, stop: stopAudio, setMuted: setMuted, isMuted: isMuted, needsGesture: needsGesture, unlock: unlock },
-    ui: { maskHtml: maskHtml, setMaskNum: setMaskNum, scoreboardTableHtml: scoreboardTableHtml }
+    ui: { maskHtml: maskHtml, setMaskNum: setMaskNum, scoreboardTableHtml: scoreboardTableHtml, bindEnterFlow: bindEnterFlow }
   };
 })(window);

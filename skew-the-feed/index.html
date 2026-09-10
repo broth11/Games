@@ -728,7 +728,11 @@
           errEl.textContent = "Couldn't reach the game board — try again.";
         });
       });
-      document.getElementById("idInput").addEventListener("keydown", function(e){ if (e.key==="Enter") document.getElementById("startBtn").click(); });
+      Engine.ui.bindEnterFlow(
+        document.getElementById("codeInput"),
+        document.getElementById("idInput"),
+        function(){ document.getElementById("startBtn").click(); }
+      );
     }
     if ((el = document.getElementById("toLbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; render(); });
     if ((el = document.getElementById("switchCodeBtn"))) el.addEventListener("click", function(){
