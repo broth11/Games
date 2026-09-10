@@ -164,7 +164,13 @@
   var HOST_POLL_MS = 3000;   // the host writes state; it barely needs to read it
   // engine.js already suppresses the first isolated not-found response,
   // so one surfaced miss here represents two consecutive backend misses.
-  var HOST_MISS_LIMIT = 1;
+  // We still wait for a few consecutive misses before giving up on a code:
+  // a freshly created game can be briefly unreadable while the Apps Script
+  // Sheet write settles, and ordinary polls hit transient hiccups.
+  var HOST_MISS_LIMIT = 3;
+  // Right after createGame()/rejoin, ignore not-found entirely for this long —
+  // the first poll tick often races ahead of the new row becoming readable.
+  var HOST_CODE_GRACE_MS = 5000;
   var CLOCK_TICK_MS = 250;   // purely local — the clock never waits on a request
 
   // Tabulating screen: students finish a beat apart because each device
@@ -176,7 +182,7 @@
 
   var state = {
     hostCode: "", lastHostCode: "", hostChecked: false, hostCreating: false, hostCreateError: "",
-    hostRejoining: false, hostRejoinError: "", hostMisses: 0,
+    hostRejoining: false, hostRejoinError: "", pollMissCount: 0, hostCodeConfirmedAt: 0,
     game: null, hostDurationMinutes: DEFAULT_MINUTES,
     playersShown: [], playersRound: null,
     screen: "dashboard",       // dashboard | results | history
@@ -283,7 +289,7 @@
           '<div class="host-top-right">' + muteBtnHtml() +
             (Engine.audio.needsGesture && Engine.audio.needsGesture() ? '<button class="mute-btn" id="audioEnableBtn">Enable music</button>' : '') +
             '<span class="phase-pill '+phase+'" id="hostPhasePill">'+phaseLabel(phase)+'</span></div></div>' +
-        (state.hostMisses ? '<p class="host-note" id="hostReconnectNote">Reconnecting to the game board&hellip;</p>' : '') +
+        (state.pollMissCount ? '<p class="host-note" id="hostReconnectNote">Reconnecting to the game board&hellip;</p>' : '') +
         '<div class="big-clock mono" id="hostClockNum">'+clockText(game, phase)+'</div>' +
         '<div id="hostDurationBlock" style="display:'+(running?"none":"block")+';">' +
           '<label for="hostMinutes">Round length (minutes)</label>' +
@@ -484,7 +490,8 @@
     var retireCode = state.hostCode || state.lastHostCode || undefined;
     Engine.session.createGame(retireCode).then(function(code){
       state.hostCreating = false; state.hostCode = code; state.lastHostCode = code; state.hostChecked = false;
-      state.hostMisses = 0; state.playersShown = []; state.playersRound = null;
+      state.pollMissCount = 0; state.hostCodeConfirmedAt = Date.now();
+      state.playersShown = []; state.playersRound = null;
       state.hostDurationMinutes = DEFAULT_MINUTES;
       lsSet("skewfeed_host_code", code);
       lsSet("skewfeed_last_host_code", code);
@@ -527,7 +534,8 @@
         render();
         return;
       }
-      state.hostCode = code; state.lastHostCode = code; state.hostChecked = false; state.hostMisses = 0;
+      state.hostCode = code; state.lastHostCode = code; state.hostChecked = false;
+      state.pollMissCount = 0; state.hostCodeConfirmedAt = Date.now();
       state.game = null; state.playersShown = []; state.playersRound = null; state.screen = "dashboard"; lastRound = null;
       lsSet("skewfeed_host_code", code);
       lsSet("skewfeed_last_host_code", code);
@@ -609,21 +617,31 @@
     Engine.session.startPolling(code, HOST_POLL_MS, function(game, meta){
       state.hostChecked = true;
       if (!game){
+        // `meta.retired` is an explicit teardown from the backend — the code
+        // is genuinely gone, drop it right away. Anything else is a plain
+        // not-found, which can be transient: a just-created game whose Sheet
+        // row isn't readable yet, or an ordinary polling hiccup. Only give up
+        // once we've missed HOST_MISS_LIMIT times in a row AND we're past the
+        // post-creation grace window.
         if (!meta || !meta.retired){
-          state.hostMisses += 1;
-          if (state.hostMisses < HOST_MISS_LIMIT){
+          state.pollMissCount += 1;
+          var sinceConfirmed = state.hostCodeConfirmedAt
+            ? (Date.now() - state.hostCodeConfirmedAt) : Infinity;
+          var withinGrace = sinceConfirmed < HOST_CODE_GRACE_MS;
+          if (withinGrace || state.pollMissCount < HOST_MISS_LIMIT){
             if (state.screen === "dashboard") render();
             return;
           }
         }
-        state.hostMisses = 0;
+        state.pollMissCount = 0; state.hostCodeConfirmedAt = 0;
         state.hostCode = ""; lsSet("skewfeed_host_code","");
         Engine.audio.stop();
         render();
         return;
       }
-      var wasReconnecting = state.hostMisses > 0;
-      state.hostMisses = 0;
+      var wasReconnecting = state.pollMissCount > 0;
+      state.pollMissCount = 0;
+      state.hostCodeConfirmedAt = Date.now();
       state.game = game;
       var roundChanged = game.round !== lastRound;
       lastRound = game.round;
