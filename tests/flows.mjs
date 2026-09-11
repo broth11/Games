@@ -102,7 +102,7 @@ function page(file,clock,storage,api,search=''){
   for(const match of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)){
     const src=match[1].match(/src="([^"]+)"/)?.[1];
     if(src?.startsWith('http')||src?.includes('vendor/katex'))continue;
-    if(src?.endsWith('audio.js')){sandbox.Engine.audio={unlock:async()=>{},playFor(){},fanfare(){fanfares++;},setMuted(){},isMuted:()=>false,needsGesture:()=>false,setVolume(){},volume:()=>.4};continue;}
+    if(src&&/audio(?:-b)?\.js$/.test(src)){sandbox.Engine.audio={unlock:async()=>{},playFor(){},fanfare(){fanfares++;},setMuted(){},isMuted:()=>false,needsGesture:()=>false,setVolume(){},volume:()=>.4};continue;}
     const code=src?fs.readFileSync(path.resolve(root,path.dirname(file),src),'utf8'):match[2];
     if(code.trim())vm.runInContext(code,context,{filename:src||file});
   }
@@ -124,6 +124,17 @@ function answer(student,slug){
     Object.defineProperty(sel,'value',{value:option.value,writable:true,configurable:true});sel.dispatchEvent(new student.Event('change',{bubbles:true}));
   });
   student.click('#submitBtn');
+}
+
+function plotState(page){
+  const title=page.document.querySelector('.evidence h1')?.textContent;
+  const prompt=page.document.getElementById('question')?.textContent;
+  const item=page.sandbox.PLOT_CASES.find(c=>c.title===title);assert(item,'Current Plot Twist ladder is in the question bank');
+  const question=item.questions.find(q=>q.prompt===prompt);assert(question,'Current Plot Twist decision is in its ladder');
+  const correctText=question.choices[question.answer];
+  const choice=[...page.document.querySelectorAll('[data-choice]')].find(button=>button.textContent.includes(correctText));
+  assert(choice,'Correct Plot Twist option is rendered');
+  return {visual:item.visual,selector:`[data-choice="${choice.dataset.choice}"]`};
 }
 
 for(const slug of ['spot-the-error','double-blind','skew-the-feed']){
@@ -173,6 +184,60 @@ for(const slug of ['spot-the-error','double-blind','skew-the-feed']){
   const second=[...api.runs.values()].filter(r=>r.round===2);
   assert(second.length>0&&second.every(r=>r.score===0&&r.attempted===0),'Countdown stop does not reuse the previous score: '+JSON.stringify(second));
   console.log('PASS',slug,': production API, entry flow, roster, round sync, confirmed podium, fanfare, and countdown stop.');
+}
+
+{
+  const clock=new Clock(),storage=new Store(),api=new MockApi(clock),host=page('plot-twist/host.html',clock,storage,api,'?mode=demo');
+  assert.equal(host.sandbox.Engine.preview,false,'Plot Twist preview stays disabled even on a mode-tagged URL');
+  assert.equal(host.sandbox.Engine.config().gameType,'plot-twist');
+  host.click('[data-action="create"]');await clock.advance(100);
+  const code=host.sandbox.Engine.session.getCurrent().code;
+  assert(api.calls.some(c=>c.action==='createGame'),'Plot Twist production host uses the API');
+
+  const student=page('plot-twist/index.html',clock,storage,api,'?mode=demo');
+  student.input('#bCode',code);student.input('#bId','9001');student.submit();await clock.advance(100);
+  assert(student.document.querySelector('.b-lobby'),'Plot Twist student reaches the room lobby');
+  const hostHref=student.document.getElementById('teacherHostLink').getAttribute('href');
+  assert(hostHref.includes('code='+code),'Teacher host link keeps the joined room code');
+  assert(hostHref.includes('mode=live'),'Teacher host link explicitly stays in production mode');
+
+  await clock.advance(6000);
+  assert.equal(host.document.getElementById('rosterCount').textContent,'1');
+  host.click('[data-minutes="3"]');host.click('[data-action="start"]');await clock.advance(8000);
+  assert(student.document.querySelector('[data-choice]'),'Plot Twist enters the decision ladder');
+  student.click(plotState(student).selector);
+  await clock.advance(200000);
+  assert.match(student.document.getElementById('bSaveStatus').textContent,/Result saved/);
+  assert(host.document.querySelector('.b-podium'),'A completed Plot Twist round reveals confirmed results');
+  assert.equal(host.fanfares(),1,'A completed Plot Twist round plays one fanfare');
+  await clock.advance(8000);assert.equal(host.fanfares(),1,'Plot Twist fanfare does not repeat');
+
+  host.click('[data-action="next"]');await clock.advance(100);host.click('[data-action="start"]');await clock.advance(3000);
+  host.click('[data-action="stop"]');await clock.advance(100);host.click('[data-action="confirm-stop"]');await clock.advance(22000);
+  assert.match(host.document.getElementById('hostMain').textContent,/Round stopped/);
+  assert.equal(host.fanfares(),1,'An early Plot Twist stop does not celebrate');
+  console.log('PASS plot-twist: production config, same-room host link, round sync, confirmed podium, one fanfare, and quiet early stop.');
+}
+
+{
+  const clock=new Clock(),storage=new Store(),api=new MockApi(clock),practice=page('plot-twist/index.html',clock,storage,api,'?practice=1');
+  assert.match(practice.document.getElementById('app').textContent,/Untimed · no ID required · no scores sent/);
+  assert.equal(api.calls.length,0,'Opening Plot Twist practice does not contact the classroom API');
+  practice.click('#practiceStart');
+  const imageRefs=new Set();
+  for(let decision=0;decision<132;decision++){
+    const {visual,selector}=plotState(practice);
+    const figure=practice.document.querySelector('.evidence figure');assert(figure,'Every Plot Twist decision renders its statistical evidence');
+    if(visual.type==='image'){
+      const img=figure.querySelector('img.statistical-image');assert(img,'Referenced statistical graphic renders as an image');
+      const src=img.getAttribute('src');imageRefs.add(src);assert(fs.existsSync(path.join(root,'plot-twist',src)),'Rendered graphic exists: '+src);
+    }else assert(figure.children.length>0,'Generated statistical graphic is not empty');
+    practice.click(selector);practice.click('#next');
+  }
+  assert.match(practice.document.getElementById('app').textContent,/Practice complete/);
+  assert.equal(api.calls.length,0,'Completing all 132 practice decisions sends no classroom writes');
+  assert.deepEqual([...imageRefs].sort(),['graphics/aim-and-scatter.svg','graphics/axis-of-deception.svg','graphics/lunch-vote.svg','graphics/parts-of-a-whole.svg','graphics/two-rules.svg']);
+  console.log('PASS plot-twist practice: all 132 decisions render, every bundled statistical graphic is reached, and no scores are sent.');
 }
 
 {
