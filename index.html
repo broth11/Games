@@ -1,46 +1,46 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Classroom Games</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root{ --paper:#E7EBE2; --card:#F8FAF4; --ink:#1B1F1A; --ink-soft:#565F53; --rule:#C7CFBE; --flag:#D8433E; }
-  @media (prefers-color-scheme: dark){
-    :root:not([data-theme="light"]){ --paper:#14171A; --card:#1D2120; --ink:#ECEFE8; --ink-soft:#A2AA9C; --rule:#3A413B; --flag:#E8615C; }
-  }
-  :root[data-theme="dark"]{ --paper:#14171A; --card:#1D2120; --ink:#ECEFE8; --ink-soft:#A2AA9C; --rule:#3A413B; --flag:#E8615C; }
-  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
-  body{ background:radial-gradient(circle at 1px 1px, var(--rule) 1px, transparent 0) 0 0/16px 16px, var(--paper);
-    color:var(--ink); font-family:"IBM Plex Sans",-apple-system,system-ui,sans-serif; min-height:100vh; }
-  .wrap{max-width:640px; margin:0 auto; padding:48px 18px;}
-  h1{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:clamp(32px,7vw,48px); text-transform:uppercase; margin:0 0 8px;}
-  h1 em{font-style:normal; color:var(--flag);}
-  p.sub{color:var(--ink-soft); margin:0 0 28px;}
-  .game-card{ display:block; background:var(--card); border:1px solid var(--rule); border-radius:8px; padding:18px 20px; margin-bottom:14px; text-decoration:none; color:var(--ink); }
-  .game-card b{display:block; font-size:17px; margin-bottom:3px;}
-  .game-card span{font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--ink-soft);}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Classroom Game Ecosystem</title>
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
 </head>
-<body>
-<div class="wrap">
-  <h1>Classroom <em>Games</em></h1>
-  <p class="sub">Pick a game below.</p>
-  <a class="game-card" href="skew-the-feed/">
-    <b>Skew the Feed</b>
-    <span>AP Statistics · Unit 1 · Sampling &amp; response bias</span>
-  </a>
-  <a class="game-card" href="double-blind/">
-    <b>Double Blind</b>
-    <span>AP Statistics · Experimental design · Build &amp; Showdown</span>
-  </a>
-  <a class="game-card" href="spot-the-error/">
-    <b>Spot the Error</b>
-    <span>IB Mathematics AI HL · Calculus · Derivative rule slips</span>
-  </a>
-</div>
+<body class="b-portal">
+  <main class="b-portal-inner">
+    <header>
+      <div><span class="b-eyebrow">Classroom game ecosystem</span><h1>Choose a game.</h1></div>
+      <p>Students join with the four-character room code on the teacher’s screen. Teachers create and control each live classroom round.</p>
+    </header>
+    <div class="b-game-grid">
+      <article class="b-game-card">
+        <img src="spot-the-error/logo.png" alt="Spot the Error">
+        <span class="b-eyebrow">IB Mathematics AI HL</span><h2>Spot the Error</h2>
+        <p>Follow a worked derivative, find the first mistake, and identify the rule behind it.</p>
+        <a class="b-primary" href="spot-the-error/index.html">Student entry →</a>
+        <a class="b-secondary" href="spot-the-error/host.html">Teacher dashboard ↗</a>
+      </article>
+      <article class="b-game-card">
+        <img src="double-blind/logo.png" alt="Double Blind">
+        <span class="b-eyebrow">AP Statistics</span><h2>Double Blind</h2>
+        <p>Build an experimental design, compare competing studies, and defend the stronger method.</p>
+        <a class="b-primary" href="double-blind/index.html">Student entry →</a>
+        <a class="b-secondary" href="double-blind/host.html">Teacher dashboard ↗</a>
+      </article>
+      <article class="b-game-card">
+        <img src="skew-the-feed/logo.png" alt="Skew the Feed">
+        <span class="b-eyebrow">AP Statistics</span><h2>Skew the Feed</h2>
+        <p>Inspect claims in the feed and decide whether the evidence deserves the headline.</p>
+        <a class="b-primary" href="skew-the-feed/index.html">Student entry →</a>
+        <a class="b-secondary" href="skew-the-feed/host.html">Teacher dashboard ↗</a>
+      </article>
+    </div>
+    <section class="b-preview-guide" aria-label="Classroom workflow">
+      <div><strong>01 / Teacher opens a room</strong>Choose the teacher dashboard, create a room, and project its code.</div>
+      <div><strong>02 / Students join</strong>Choose the student entry, then enter the room code and a roster ID.</div>
+      <div><strong>03 / Play and confirm</strong>The teacher starts the round. The final podium appears only after saved results are confirmed.</div>
+    </section>
+  </main>
 </body>
 </html>

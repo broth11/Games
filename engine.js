@@ -1,558 +1,177 @@
-/**
- * engine.js — shared classroom-game engine
- * ---------------------------------------------------------
- * Talks to the Apps Script + Google Sheet backend so any game built on
- * top of this file gets, for free: student-ID identity (no accounts),
- * game codes, a host-controlled round with a LOCAL lag-free countdown,
- * and a live scoreboard / all-time leaderboard.
- *
- * TIMING MODEL (changed September 2026 — see PROJECT-HANDOFF.md §5)
- * ---------------------------------------------------------
- * Previously every device counted down to a single shared timestamp, so
- * a device that heard about the round late saw a truncated countdown and
- * a shortened round. Now:
- *
- *   - A device that hears while the round is still in its countdown
- *     window runs its OWN 5s countdown from the moment it heard, then
- *     plays the full durationSec. Nothing in that path touches the
- *     network, so the countdown animation is perfectly smooth no matter
- *     how congested the backend is.
- *   - A device that hears after the countdown window (a late joiner)
- *     skips the countdown and plays whatever time is left on the room's
- *     shared clock — join a 5-minute round a minute late, get 4 minutes.
- *
- * The cost is that on-time devices finish a second or two apart rather
- * than in lockstep. That's covered by the host's tabulating screen.
- */
+/* Shared production transport, identity and round lifecycle. No dependencies. */
 (function (global) {
-  "use strict";
-
-  var CONFIG = { appsScriptUrl: "", gameType: "", music: null };
-  var COUNTDOWN_MS = 5000;
-  var WAITING_ROUND = 0;
-  var CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L
-
-  function configure(opts) {
-    CONFIG.appsScriptUrl = opts.appsScriptUrl;
-    CONFIG.gameType = opts.gameType;
-    CONFIG.music = opts.music || null; // optional, host pages only: {idle, countdown, live, ended}
-  }
-
-  function generateCode() {
-    var out = "";
-    for (var i = 0; i < 4; i++) out += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-    return out;
-  }
-
-  /* ---------------------------------------------------------------
-     API — GET/POST against the Apps Script web app.
-     POST uses text/plain to stay a CORS "simple request" (Apps Script
-     has no OPTIONS/preflight handler, so a JSON content-type would
-     otherwise be blocked by the browser before it ever leaves).
-  ----------------------------------------------------------------*/
-  function apiGet(action, params) {
-    var url = CONFIG.appsScriptUrl + "?action=" + encodeURIComponent(action);
-    if (params) {
-      Object.keys(params).forEach(function (k) {
-        if (params[k] !== undefined && params[k] !== null) {
-          url += "&" + encodeURIComponent(k) + "=" + encodeURIComponent(params[k]);
-        }
-      });
-    }
-    return fetch(url).then(function (r) { return r.json(); });
-  }
-
-  function apiPost(action, body) {
-    var payload = Object.assign({ action: action }, body || {});
-    return fetch(CONFIG.appsScriptUrl, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); });
-  }
-
-  /* ---------------------------------------------------------------
-     IDENTITY — student ID is the login, no accounts.
-  ----------------------------------------------------------------*/
-  var LS_PREFIX = "engine_";
-  function lsGet(k) { try { return localStorage.getItem(LS_PREFIX + k) || ""; } catch (e) { return ""; } }
-  function lsSet(k, v) { try { localStorage.setItem(LS_PREFIX + k, v); } catch (e) {} }
-  function lsClear(k) { try { localStorage.removeItem(LS_PREFIX + k); } catch (e) {} }
-
-  var identity = {
-    studentId: lsGet("studentId"),
-    displayName: lsGet("displayName"),
-    period: lsGet("period"),
-
-    isLoggedIn: function () { return !!(identity.studentId && identity.displayName); },
-
-    lookup: function (id) {
-      return apiGet("getStudent", { id: id }).then(function (res) {
-        if (res && res.found) {
-          identity.studentId = res.studentId;
-          identity.displayName = res.displayName;
-          identity.period = res.period;
-          lsSet("studentId", res.studentId);
-          lsSet("displayName", res.displayName);
-          lsSet("period", res.period);
-        }
-        return res;
-      });
-    },
-
-    logout: function () {
-      identity.studentId = ""; identity.displayName = ""; identity.period = "";
-      lsClear("studentId"); lsClear("displayName"); lsClear("period");
-    }
+  'use strict';
+  const settings = global.GAME_CONFIG || {};
+  const prefix = 'games:';
+  const previousPrefix = 'games-b:live:';
+  let config = {}, currentGame = null, pollToken = 0, pollTimer, connectedAt = 0;
+  const emit = (name, detail) => global.dispatchEvent(new CustomEvent(name, {detail}));
+  const parseStored = (name, fallback) => { try { const value=localStorage.getItem(name);return value===null?fallback:JSON.parse(value)??fallback; } catch (_) { return fallback; } };
+  const read = (key, fallback = null) => {
+    let value=parseStored(prefix+key,undefined);
+    if(value===undefined)value=parseStored(previousPrefix+key,undefined);
+    if(value===undefined&&key==='muted')value=localStorage.getItem('engine_audioMuted')==='1';
+    return value===undefined?fallback:value;
   };
-
-  /* ---------------------------------------------------------------
-     SESSION
-  ----------------------------------------------------------------*/
-  var pollTimer = null;
-  var currentGame = null;
-  var localWriteAt = 0; // wall-clock of our own last start/end write
-
+  const write = (key, value) => { try { if(value===null){localStorage.removeItem(prefix+key);localStorage.removeItem(previousPrefix+key);}else localStorage.setItem(prefix+key,JSON.stringify(value)); } catch (_) {} };
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function configure(opts) {
+    config = {...opts, appsScriptUrl: settings.appsScriptUrl || opts.appsScriptUrl};
+  }
+  async function request(action, args, post) {
+    if (!config.appsScriptUrl) throw new Error('The classroom connection has not been configured.');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const params = new URLSearchParams({action});
+      Object.entries(args || {}).forEach(([k,v]) => { if(v !== undefined && v !== null) params.set(k,v); });
+      const response = await fetch(config.appsScriptUrl + (post ? '' : '?' + params), post ? {
+        method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({action,...args}), signal:controller.signal
+      } : {signal:controller.signal});
+      if (!response.ok) throw new Error('The classroom connection is temporarily unavailable.');
+      const result = await response.json();
+      if (result.error) throw new Error(result.error);
+      if (post && result.ok !== true) throw new Error('The server did not confirm the update.');
+      return result;
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error('The connection is taking too long. Your entries are still here. Try again.');
+      throw e;
+    } finally { clearTimeout(timer); }
+  }
+  const get = (action,args={}) => request(action,args,false);
+  const post = (action,args={}) => request(action,args,true);
+  const identity = {
+    studentId:'', displayName:'', period:'',
+    isLoggedIn:() => !!identity.studentId,
+    async lookup(id) {
+      const result = await get('getStudent',{id:String(id).trim()});
+      if (result.found) Object.assign(identity,{studentId:String(result.studentId),displayName:result.displayName || 'Student',period:result.period});
+      return result;
+    },
+    logout() { identity.studentId=''; identity.displayName=''; identity.period=''; write('remembered',null); }
+  };
+  function generateCode() {
+    const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789', bytes=new Uint8Array(4);
+    crypto.getRandomValues(bytes);
+    return [...bytes].map(n => chars[n % chars.length]).join('');
+  }
+  async function createGame(retireCode) {
+    for (let attempt=0; attempt<5; attempt++) {
+      const code=generateCode();
+      try { await post('createGame',{code,gameType:config.gameType,retireCode}); }
+      catch(e) { if(e.message==='code_exists') continue; throw e; }
+      currentGame=await get('getGame',{code});
+      if(!currentGame.exists) throw new Error('The room is still being prepared. Try reconnecting with '+code+'.');
+      return code;
+    }
+    throw new Error('Could not reserve a code. Please try again.');
+  }
   function derivePhase(game) {
-    if (!game || !game.exists || !game.gameEndsAt) return "idle";
-    var now = Date.now();
-    if (now < game.countdownEndsAt) return "countdown";
-    if (now < game.gameEndsAt) return "live";
-    return "ended";
+    if(!game || !game.exists || !game.gameEndsAt) return 'idle';
+    if(Date.now()<game.countdownEndsAt) return 'countdown';
+    if(Date.now()<game.gameEndsAt) return 'live';
+    return 'ended';
   }
-
-  // retireCode is optional — pass the CURRENT code when the host is
-  // deliberately switching games ("new code" action) so the backend
-  // marks it dead in the same write that creates the new one. Omit it
-  // for the very first code of a session, where there's nothing to
-  // retire yet.
-  function createGame(retireCode) {
-    var code = generateCode();
-    var body = { code: code, gameType: CONFIG.gameType };
-    if (retireCode) body.retireCode = retireCode;
-    return apiPost("createGame", body).then(function (res) {
-      if (res && res.error === "code_exists") return createGame(retireCode);
-      if (res && res.ok) return confirmCodeReadable(code, 3);
-      throw new Error((res && res.error) || "create_failed");
-    });
-  }
-
-  // After a successful createGame write, confirm the code is actually
-  // readable via getGame before handing it back to the caller. Apps
-  // Script + Sheets writes aren't always instantly visible to the very
-  // next separate request, so without this, the caller's first poll can
-  // land during that gap and wrongly conclude the code doesn't exist.
-  function confirmCodeReadable(code, attemptsLeft) {
-    return apiGet("getGame", { code: code }).then(function (game) {
-      if (game && game.exists) return code;
-      if (attemptsLeft <= 1) return code;
-      return new Promise(function (resolve) {
-        setTimeout(function () { resolve(confirmCodeReadable(code, attemptsLeft - 1)); }, 400);
-      });
-    }).catch(function () { return code; });
-  }
-
-  function checkCode(code) {
-    return apiGet("getGame", { code: code }).then(function (game) {
-      return !!(game && game.exists && !game.retired);
-    });
-  }
-
-  // Responses can arrive out of order (Apps Script round-trips run
-  // 1-2.5s). Each tick gets a rising sequence number; a response is
-  // applied only if it's still the most recent request in flight.
-  var pollSeq = 0;
-  var notFoundStreak = 0;
-
-  // Guards against a poll response that reflects the server's state from
-  // BEFORE a manual startRound/endRound write has landed. Without this, a
-  // slow-to-arrive poll can show the old, still-running round and clobber
-  // the local state we already updated optimistically — which looks like
-  // the round "restarting" on its own right after End Round Now was
-  // clicked.
-  function isStaleAgainstLocal(fetched, known) {
-    if (!known || !fetched) return false;
-    if (fetched.code !== known.code) return false;
-    if (fetched.round < known.round) return true;
-    if (fetched.round === known.round && known.gameEndsAt && fetched.gameEndsAt > known.gameEndsAt) return true;
-    return false;
-  }
-
-  // Self-rescheduling rather than setInterval, so the gap is measured
-  // BETWEEN responses — a slow backend naturally backs off instead of
-  // stacking overlapping requests. The random jitter keeps 30 tabs
-  // opened in the same 20 seconds from phase-locking into synchronized
-  // bursts against a backend with a real concurrency ceiling.
-  // A retired code (see createGame's retireCode) still `exists` in the
-  // sheet — it's just marked dead by the host's OWN move to a different
-  // code, as opposed to simply never having been created. onUpdate's
-  // second argument distinguishes the two so a caller (a student page)
-  // can tell "this code was never valid" apart from "your teacher moved
-  // everyone to a new code" and say something more useful than generic.
+  const isFullRound = game => !!(game && game.round>0 && game.durationSec>0 && game.gameEndsAt >= game.countdownEndsAt + game.durationSec*1000 - 1000);
+  function stopPolling() { ++pollToken; clearTimeout(pollTimer); }
   function startPolling(code, intervalMs, onUpdate) {
-    stopPolling();
-    notFoundStreak = 0;
-    var base = intervalMs || 2000;
-    function tick() {
-      var mySeq = ++pollSeq;
-      apiGet("getGame", { code: code }).then(function (game) {
-        if (mySeq !== pollSeq) return;
-        var retired = !!(game && game.retired);
-        var fetchedGame = (game && game.exists && !retired) ? game : null;
-        if (isStaleAgainstLocal(fetchedGame, currentGame)) return;
-        if (!fetchedGame && !retired) {
-          notFoundStreak++;
-          if (notFoundStreak < 2) return;
-        } else {
-          notFoundStreak = 0;
-        }
-        currentGame = fetchedGame;
-        onUpdate(currentGame, { retired: retired });
-      }).catch(function () { /* transient hiccup — next tick retries */ })
-        .then(function () {
-          pollTimer = setTimeout(tick, base + Math.random() * 600);
-        });
+    stopPolling(); connectedAt=Date.now(); const token=pollToken; let failures=0;
+    async function tick() {
+      try {
+        const game=await get('getGame',{code});
+        if(token!==pollToken) return;
+        failures=0;
+        if(game.exists && !game.retired && game.gameType===config.gameType) {
+          if(currentGame && currentGame.code===code && (game.round<currentGame.round || (game.round===currentGame.round && game.gameEndsAt>currentGame.gameEndsAt && currentGame.gameEndsAt))) return;
+          currentGame=game; onUpdate(game,{});
+        } else { currentGame=null; onUpdate(null,{retired:!!game.retired}); }
+        emit('engineconnection',{ok:true});
+      } catch(e) { failures++; if(token===pollToken) emit('engineconnection',{ok:false,message:e.message}); }
+      finally { if(token===pollToken) pollTimer=setTimeout(tick,Math.min(8000,(intervalMs||2000)*(1+failures))+Math.random()*700); }
     }
     tick();
   }
-
-  function stopPolling() {
-    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
-  }
-
-  // Takes effect on the CALLER's screen immediately — currentGame is
-  // updated synchronously, before the network write resolves — so the
-  // host never watches their own dashboard wait on a poll.
-  function startRound(code, minutes) {
-    var durationSec = Math.round(minutes * 60);
-    var now = Date.now();
-    var countdownEndsAt = now + COUNTDOWN_MS;
-    var gameEndsAt = countdownEndsAt + durationSec * 1000;
-    var round = (currentGame && currentGame.round ? currentGame.round : 0) + 1;
-    localWriteAt = now;
-    currentGame = {
-      exists: true, code: code, gameType: CONFIG.gameType, round: round,
-      durationSec: durationSec, countdownEndsAt: countdownEndsAt, gameEndsAt: gameEndsAt, startedAt: now
-    };
-    apiPost("startRound", {
-      code: code, round: round, durationSec: durationSec,
-      countdownEndsAt: countdownEndsAt, gameEndsAt: gameEndsAt
-    }).catch(function () {});
-    return currentGame;
-  }
-
-  function endRound(code) {
-    var now = Date.now();
-    localWriteAt = now;
-    if (currentGame) {
-      currentGame = Object.assign({}, currentGame, {
-        gameEndsAt: now,
-        countdownEndsAt: Math.min(currentGame.countdownEndsAt || now, now)
-      });
+  async function startRound(code,minutes) {
+    const before=await get('getGame',{code});
+    if(!before.exists || before.retired || before.gameType!==config.gameType) throw new Error('This room is no longer available.');
+    if(['live','countdown'].includes(derivePhase(before))) throw new Error('A round is already running.');
+    const durationSec=Math.round(Number(minutes)*60);
+    if(!Number.isFinite(durationSec)||durationSec<15||durationSec>3600) throw new Error('Choose a duration between 15 seconds and 60 minutes.');
+    const countdownEndsAt=Date.now()+5000;
+    const payload={code,round:before.round+1,durationSec,countdownEndsAt,gameEndsAt:countdownEndsAt+durationSec*1000};
+    try { await post('startRound',payload); }
+    catch(e) {
+      const check=await get('getGame',{code});
+      if(check.round!==payload.round || check.countdownEndsAt!==payload.countdownEndsAt) throw e;
     }
-    apiPost("endRound", { code: code }).catch(function () {});
-    return currentGame;
+    currentGame={...before,...payload}; return currentGame;
   }
-
-  /* ---------------------------------------------------------------
-     ROUND — the student-side local clock. Any game can reuse this.
-
-     plan(game) decides, from the game row a poll just handed us, how
-     THIS device should run the round. Returns null if there's nothing
-     to join, otherwise:
-       { round, countdownEnd, playEnd, late, secondsAvailable }
-     countdownEnd === 0 means "no countdown, start immediately".
-  ----------------------------------------------------------------*/
-  // forceOnTime skips the "did we hear in time" check entirely and always
-  // gives an on-time countdown + full duration. Used for anyone who has
-  // already joined at least one round this session (a restart, or the
-  // normal next-round handoff) — they're actively connected and polling,
-  // so there's no ambiguity about whether the round "really just
-  // started" the way there is for a fresh registration mid-round. Without
-  // this, a student could occasionally miss the 5s countdown window
-  // purely from poll-timing/backend latency and get silently skipped
-  // past the shared countdown moment everyone else in the room sees.
-  function planRound(game, forceOnTime) {
-    if (!game || !game.exists || !game.gameEndsAt) return null;
-    var now = Date.now();
-    if (now >= game.gameEndsAt) return null; // round's over
-
-    if (forceOnTime || now < game.countdownEndsAt) {
-      // Heard in time (or we're forcing it) — our own clean countdown,
-      // then the full duration.
-      var cd = now + COUNTDOWN_MS;
-      return {
-        round: game.round,
-        countdownEnd: cd,
-        playEnd: cd + game.durationSec * 1000,
-        late: false,
-        secondsAvailable: game.durationSec
-      };
+  async function endRound(code) {
+    try { await post('endRound',{code}); }
+    catch(e) { const check=await get('getGame',{code}); if(derivePhase(check)!=='ended') throw e; }
+    currentGame=await get('getGame',{code}); return currentGame;
+  }
+  function plan(game,forceOnTime) {
+    const now=Date.now();
+    if(!game || !game.exists || now>=game.gameEndsAt) return null;
+    const nearStart=now<game.countdownEndsAt+8000 && (forceOnTime || connectedAt<game.countdownEndsAt);
+    if(now<game.countdownEndsAt || nearStart) {
+      return {round:game.round,countdownEnd:now+5000,playEnd:now+5000+game.durationSec*1000,late:false,secondsAvailable:game.durationSec};
     }
-
-    // Late joiner (first-ever round for this device, heard about it well
-    // after it started) — no countdown, share the room's finish line.
-    return {
-      round: game.round,
-      countdownEnd: 0,
-      playEnd: game.gameEndsAt,
-      late: true,
-      secondsAvailable: Math.max(0, Math.round((game.gameEndsAt - now) / 1000))
-    };
+    return {round:game.round,countdownEnd:0,playEnd:game.gameEndsAt,late:true,secondsAvailable:Math.max(0,Math.ceil((game.gameEndsAt-now)/1000))};
   }
-
-  // Runs a purely local countdown. No network in the loop, so the
-  // animation is smooth regardless of backend latency. Calls onTick(n)
-  // each time the whole-second number changes, then onDone().
-  function runCountdown(countdownEnd, onTick, onDone) {
-    var last = null;
-    var id = setInterval(function () {
-      var left = Math.ceil((countdownEnd - Date.now()) / 1000);
-      if (left <= 0) { clearInterval(id); if (onDone) onDone(); return; }
-      if (left !== last) { last = left; if (onTick) onTick(left); }
-    }, 80);
-    var first = Math.ceil((countdownEnd - Date.now()) / 1000);
-    if (first > 0 && onTick) { last = first; onTick(first); }
-    return { cancel: function () { clearInterval(id); } };
+  function runCountdown(end,onTick,onDone) {
+    let last;
+    const tick=()=>{const n=Math.ceil((end-Date.now())/1000);if(n<=0){clearInterval(timer);onDone?.();}else if(n!==last){last=n;onTick?.(n);}};
+    const timer=setInterval(tick,80); tick(); return {cancel:()=>clearInterval(timer)};
   }
-
-  /* ---------------------------------------------------------------
-     PLAYERS
-  ----------------------------------------------------------------*/
+  const progressQueues=new Map(), saves=new Map();
+  const runKey=p=>p.code+':'+p.round+':'+p.studentId;
   function pushProgress(fields) {
-    return apiPost("updatePlayer", Object.assign({ gameType: CONFIG.gameType }, fields)).catch(function () {});
+    const key=runKey(fields), payload={gameType:config.gameType,...fields};
+    const job=(progressQueues.get(key)||Promise.resolve()).catch(()=>{}).then(()=>post('updatePlayer',payload));
+    progressQueues.set(key,job);
+    return job.catch(e=>{emit('engineconnection',{ok:false,message:e.message});return null;});
   }
-
-  function pushWaitingPresence(fields) {
-    return pushProgress(Object.assign({
-      round: WAITING_ROUND,
-      score: 0, streak: 0, bestStreak: 0,
-      correct: 0, attempted: 0
-    }, fields || {}));
-  }
-
-  function saveRun(payload) {
-    return apiPost("saveRun", Object.assign({ gameType: CONFIG.gameType, ts: Date.now() }, payload)).catch(function () {});
-  }
-
-  function getPlayers(code, round) {
-    return apiGet("getPlayers", { code: code, round: round });
-  }
-
-  function getLeaderboard(opts) {
-    var o = (typeof opts === "number") ? { limit: opts } : (opts || {});
-    return apiGet("getLeaderboard", {
-      gameType: CONFIG.gameType, limit: o.limit || 100, code: o.code, round: o.round
-    });
-  }
-
-  /* ---------------------------------------------------------------
-     AUDIO — host-only background music, keyed to the round phase.
-
-     FOR HOST PAGES ONLY. Nothing is constructed or fetched until the
-     first playFor() call, so a student page that never calls it
-     downloads zero bytes of audio even though this code ships in the
-     shared engine. Do NOT wire this into a student index.html — 30
-     phones looping the same track slightly out of sync is genuinely
-     unpleasant in a room.
-
-     Config is per game, in that game's Engine.configure(...):
-       music: { idle, countdown, live, ended }
-     Keys MUST match what derivePhase() returns. Any phase omitted is
-     deliberate silence; no `music` key at all means a silent game.
-
-     Phase changes cross-fade, so a round ending fades out rather than
-     sounding like a crash.
-  ----------------------------------------------------------------*/
-  var FADE_MS = 450;
-  var MUSIC_VOLUME = 0.35;   // low by default — the host talks over this
-  var audioEls = {};         // phase -> HTMLAudioElement, built on demand
-  var audioPhase = null;
-  var audioMuted = (lsGet("audioMuted") === "1");
-  var audioBlocked = false;
-
-  function signalAudioChange() {
-    if (global.dispatchEvent && global.CustomEvent) {
-      global.dispatchEvent(new CustomEvent("engineaudiochange"));
+  async function commitRun(payload) {
+    const key=runKey(payload);
+    emit('enginesave',{state:'saving',key}); write('pending:'+key,payload);
+    try {
+      await (progressQueues.get(key)||Promise.resolve()).catch(()=>{});
+      // Read before write also makes an explicit retry safe after a lost response.
+      const rows=await get('getLeaderboard',{gameType:config.gameType,code:payload.code,round:payload.round,limit:1000});
+      if(!rows.some(r=>String(r.studentId)===String(payload.studentId))) await post('saveRun',payload);
+      write('pending:'+key,null); emit('enginesave',{state:'saved',key}); return true;
+    } catch(e) {
+      emit('enginesave',{state:'pending',key,message:e.message}); return false;
     }
   }
-
-  function getAudioEl(phase) {
-    if (audioEls[phase]) return audioEls[phase];
-    var src = CONFIG.music && CONFIG.music[phase];
-    if (!src) return null;
-    var a = new Audio(src);
-    a.loop = true;
-    a.preload = "auto";
-    a.volume = 0;
-    audioEls[phase] = a;
-    return a;
+  function saveRun(fields) {
+    const payload={gameType:config.gameType,ts:Date.now(),...fields},key=runKey(payload);
+    if(saves.has(key)) return saves.get(key);
+    const job=commitRun(payload); saves.set(key,job); return job;
   }
-
-  function fadeTo(a, target, ms) {
-    if (!a) return;
-    if (a._fadeTimer) clearInterval(a._fadeTimer);
-    var from = a.volume, start = Date.now();
-    a._fadeTimer = setInterval(function () {
-      var t = Math.min(1, (Date.now() - start) / ms);
-      a.volume = Math.max(0, Math.min(1, from + (target - from) * t));
-      if (t >= 1) {
-        clearInterval(a._fadeTimer); a._fadeTimer = null;
-        if (target === 0) { a.pause(); a.currentTime = 0; }
-      }
-    }, 30);
-  }
-
-  function startPhaseTrack(phase) {
-    var el = getAudioEl(phase);
-    if (!el) return;
-    el.volume = 0;
-    // Rejects if no user gesture has happened yet. On a host page the
-    // teacher has usually clicked something first, but restored host tabs
-    // can still hit autoplay policy before any gesture in this page load.
-    var p = el.play();
-    if (p && p.then) {
-      p.then(function () {
-        audioBlocked = false;
-        fadeTo(el, MUSIC_VOLUME, FADE_MS);
-      }).catch(function () {
-        audioBlocked = true;
-        signalAudioChange();
-      });
-    } else {
-      audioBlocked = false;
-      fadeTo(el, MUSIC_VOLUME, FADE_MS);
+  function retrySave(key) {const payload=read('pending:'+key);return payload ? commitRun(payload) : Promise.resolve(true);}
+  function retryPending() {
+    const keys=new Set();
+    for(let i=0;i<localStorage.length;i++){
+      const stored=localStorage.key(i);
+      for(const base of [prefix,previousPrefix])if(stored?.startsWith(base+'pending:'))keys.add(stored.slice((base+'pending:').length));
     }
+    return Promise.all([...keys].map(key=>{
+      const payload=read('pending:'+key);
+      return payload&&payload.gameType===config.gameType?commitRun(payload):Promise.resolve(true);
+    }));
   }
-
-  // Safe to call on every tick — a repeat of the current phase is a no-op.
-  function playFor(phase) {
-    if (phase === audioPhase) return;
-    var outgoing = audioPhase ? audioEls[audioPhase] : null;
-    audioPhase = phase;
-    if (outgoing) fadeTo(outgoing, 0, FADE_MS);
-    if (audioMuted) return;
-    startPhaseTrack(phase);
-  }
-
-  function stopAudio() {
-    Object.keys(audioEls).forEach(function (p) { fadeTo(audioEls[p], 0, FADE_MS); });
-    audioPhase = null;
-  }
-
-  // Persists across reloads — a machine muted last period stays muted
-  // rather than surprising the room on refresh.
-  function setMuted(v) {
-    audioMuted = !!v;
-    lsSet("audioMuted", audioMuted ? "1" : "0");
-    if (audioMuted) {
-      audioBlocked = false;
-      Object.keys(audioEls).forEach(function (p) { fadeTo(audioEls[p], 0, FADE_MS); });
-    } else if (audioPhase) startPhaseTrack(audioPhase);
-  }
-
-  function isMuted() { return audioMuted; }
-  function needsGesture() { return !!(audioBlocked && !audioMuted && audioPhase && CONFIG.music && CONFIG.music[audioPhase]); }
-  function unlock() {
-    if (!audioPhase || audioMuted) return;
-    audioBlocked = false;
-    startPhaseTrack(audioPhase);
-  }
-
-  /* ---------------------------------------------------------------
-     UI HELPERS
-  ----------------------------------------------------------------*/
-  // `countdownEnd` here is the device's OWN local countdown end, not
-  // the game row's shared timestamp.
-  function maskHtml(countdownEnd, kicker, sub) {
-    var end = countdownEnd || 0;
-    var remaining = Math.max(0, Math.ceil((end - Date.now()) / 1000));
-    return (
-      '<div class="mask" id="countMask">' +
-        '<div class="mask-kicker">' + (kicker || "Starting in") + '</div>' +
-        '<div class="mask-num mono pop" id="maskNum">' + remaining + '</div>' +
-        '<div class="mask-sub">' + (sub || "") + '</div>' +
-      '</div>'
-    );
-  }
-
-  function setMaskNum(n) {
-    var el = document.getElementById("maskNum");
-    if (!el) return;
-    el.textContent = n;
-    el.classList.remove("pop");
-    void el.offsetWidth; // force reflow so the animation restarts
-    el.classList.add("pop");
-  }
-
-  // Enter-key flow for a two-field "game code + student ID" sign-in screen,
-  // shared so every game wires it up in one line. On Enter in EITHER field:
-  //   - code filled, ID empty  -> move focus to the ID field
-  //   - ID filled, code empty   -> move focus to the code field
-  //   - both filled             -> onSubmit() (the same path the button click uses)
-  //   - both empty              -> nothing
-  // Never clears, resets, or re-renders either field's existing value.
-  function bindEnterFlow(codeEl, idEl, onSubmit) {
-    if (!codeEl || !idEl || typeof onSubmit !== "function") return;
-    function handler(e) {
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      var codeFilled = codeEl.value.trim() !== "";
-      var idFilled = idEl.value.trim() !== "";
-      if (codeFilled && idFilled) onSubmit();
-      else if (codeFilled) idEl.focus();
-      else if (idFilled) codeEl.focus();
-      // both empty: do nothing
-    }
-    codeEl.addEventListener("keydown", handler);
-    idEl.addEventListener("keydown", handler);
-  }
-
-  function scoreboardTableHtml(rows, columns) {
-    if (!rows || !rows.length) return '<div class="lb-empty">No scores reported yet.</div>';
-    var head = '<th>#</th>' + columns.map(function (c) {
-      return '<th' + (c.numeric ? ' class="num"' : '') + '>' + c.label + '</th>';
-    }).join("");
-    var body = rows.map(function (r, i) {
-      var badgeCls = "rank-badge" + (i < 3 ? " top" : "");
-      var cells = columns.map(function (c) {
-        var v = r[c.key];
-        return '<td' + (c.numeric ? ' class="num"' : '') + '>' + (v === undefined || v === null || v === "" ? "&mdash;" : v) + '</td>';
-      }).join("");
-      return '<tr><td><span class="' + badgeCls + '">' + (i + 1) + '</span></td>' + cells + '</tr>';
-    }).join("");
-    return '<div style="overflow-x:auto;"><table class="lb"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>';
-  }
-
-  global.Engine = {
-    configure: configure,
-    generateCode: generateCode,
-    COUNTDOWN_MS: COUNTDOWN_MS,
-    WAITING_ROUND: WAITING_ROUND,
-    api: { get: apiGet, post: apiPost },
-    identity: identity,
-    session: {
-      derivePhase: derivePhase,
-      createGame: createGame,
-      checkCode: checkCode,
-      startPolling: startPolling,
-      stopPolling: stopPolling,
-      startRound: startRound,
-      endRound: endRound,
-      getCurrent: function () { return currentGame; }
-    },
-    round: {
-      plan: planRound,
-      runCountdown: runCountdown
-    },
-    players: {
-      pushProgress: pushProgress,
-      pushWaitingPresence: pushWaitingPresence,
-      saveRun: saveRun,
-      getPlayers: getPlayers
-    },
-    leaderboard: { get: getLeaderboard },
-    audio: { playFor: playFor, stop: stopAudio, setMuted: setMuted, isMuted: isMuted, needsGesture: needsGesture, unlock: unlock },
-    ui: { maskHtml: maskHtml, setMaskNum: setMaskNum, scoreboardTableHtml: scoreboardTableHtml, bindEnterFlow: bindEnterFlow }
+  function maskHtml(end,kicker,sub) {return '<div class="mask" id="countMask"><div class="mask-kicker">'+esc(kicker)+'</div><div class="mask-num" id="maskNum">'+Math.max(0,Math.ceil((end-Date.now())/1000))+'</div><div class="mask-sub">'+esc(sub)+'</div></div>';}
+  function scoreboardTableHtml(rows,columns) {return '<table class="lb"><thead><tr><th>Rank</th>'+columns.map(c=>'<th>'+esc(c.label)+'</th>').join('')+'</tr></thead><tbody>'+rows.map((r,i)=>'<tr><td>'+(i+1)+'</td>'+columns.map(c=>'<td>'+esc(r[c.key])+'</td>').join('')+'</tr>').join('')+'</tbody></table>';}
+  global.Engine={
+    configure,generateCode,COUNTDOWN_MS:5000,WAITING_ROUND:0,
+    config:()=>config,storage:{read,write},esc,api:{get,post},identity,
+    session:{derivePhase,isFullRound,createGame,startPolling,stopPolling,startRound,endRound,getCurrent:()=>currentGame,checkCode:async code=>{const g=await get('getGame',{code});return !!(g.exists&&!g.retired&&g.gameType===config.gameType);}},
+    round:{plan,runCountdown},
+    players:{pushProgress,pushWaitingPresence:fields=>pushProgress({round:0,score:0,streak:0,bestStreak:0,correct:0,attempted:0,...fields}),saveRun,retrySave,retryPending,getPlayers:(code,round)=>get('getPlayers',{code,round})},
+    leaderboard:{get:opts=>get('getLeaderboard',{gameType:config.gameType,limit:1000,...(typeof opts==='number'?{limit:opts}:opts)})},
+    ui:{maskHtml,setMaskNum:n=>{const el=document.getElementById('maskNum');if(el)el.textContent=n;},scoreboardTableHtml,bindEnterFlow:()=>{}}
   };
 })(window);

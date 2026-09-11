@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Spot the Error — Derivatives</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" />
+<link rel="stylesheet" href="../vendor/katex/katex.min.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Cormorant:wght@400;500;600&display=swap" rel="stylesheet">
@@ -263,23 +263,24 @@
   .foot-note{text-align:center; margin-top:26px; font-size:0.6875rem; color:var(--ink-soft);}
   .code-input{text-transform:uppercase; text-align:center; letter-spacing:.3em; font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:1.375rem !important;}
 </style>
+<link rel="stylesheet" href="../site.css">
 </head>
-<body>
+<body data-game="spot-the-error">
 <div id="app" class="wrap"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script src="../vendor/katex/katex.min.js"></script>
+<script src="../vendor/katex/auto-render.min.js"></script>
+<script src="../config.js"></script>
+<script src="brand.js"></script>
 <script src="../engine.js"></script>
+<script src="../student.js"></script>
 <script src="questions.js"></script>
 <script>
 (function(){
   "use strict";
 
   // ---- one-time config for this game ----
-  Engine.configure({
-    appsScriptUrl: "https://script.google.com/macros/s/AKfycbwdGJAOLH5JskqJTckVxZuOGcu-nBAEj0DXe5M2tKcWHby4ZfVRM_1-IL11WA_g0iIr7Q/exec",
-    gameType: "spot-the-error-derivatives"
-  });
+  Engine.configure({gameType: GAME_BRAND.gameType});
 
   var POLL_MS = 1500;          // lobby / play poll cadence (engine adds jitter)
   var PROGRESS_FLUSH_MS = 5000; // coalesce live-score writes to protect the backend
@@ -340,9 +341,9 @@
   }
   function mmss(sec){ var m=Math.floor(sec/60), s=sec%60; return m+":"+(s<10?"0":"")+s; }
 
-  function lsGet(k){ try{ return localStorage.getItem(k)||""; }catch(e){ return ""; } }
-  function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
-  function lsClear(k){ try{ localStorage.removeItem(k); }catch(e){} }
+  function lsGet(k){ try{ return localStorage.getItem("b-"+Engine.mode+":"+k)||""; }catch(e){ return ""; } }
+  function lsSet(k,v){ try{ localStorage.setItem("b-"+Engine.mode+":"+k,v); }catch(e){} }
+  function lsClear(k){ try{ localStorage.removeItem("b-"+Engine.mode+":"+k); }catch(e){} }
 
   // A game code is never deleted from the Games sheet, so an old cached
   // code always still "exists" — a poll against it won't come back null,
@@ -373,8 +374,16 @@
   ----------------------------------------------------------------*/
   function render(){
     var app = document.getElementById("app");
-    if (state.screen === "register") app.innerHTML = viewRegister();
-    else if (state.screen === "briefing") app.innerHTML = viewBriefing();
+    if (state.screen === "register") {
+      stopLobbyPresence();
+      Engine.join.mount(app, function(code){
+        state.gameCode=code; state.joinedRound=-1; state.joinError="";
+        rememberCode(code); state.screen="lobby"; render(); startGamePolling(code); refreshLeaderboard();
+      }, state.joinError);
+      return;
+    }
+    document.body.classList.remove("b-joining");
+    if (state.screen === "briefing") app.innerHTML = viewBriefing();
     else if (state.screen === "lobby") app.innerHTML = viewLobby();
     else if (state.screen === "countdown") app.innerHTML = Engine.ui.maskHtml(state.localCountdownEnd, "Round starts in", "Get ready to inspect worked derivatives.");
     else if (state.screen === "play") app.innerHTML = viewPlay();
@@ -422,39 +431,6 @@
   /* ---------------------------------------------------------------
      REGISTER
   ----------------------------------------------------------------*/
-  function viewRegister(){
-    var legendRows = CAT_ORDER.map(function(k){
-      var c = CATS[k];
-      return '<div class="legend-row"><div class="swatch" style="background:'+c.color+'"></div><div><b>'+esc(c.label)+'.</b> <span>'+esc(c.sub)+'</span></div></div>';
-    }).join("");
-    return '' +
-      masthead() +
-      '<div class="register-shell">' +
-        '<div class="register-cols">' +
-          '<div class="card stack">' +
-            '<div><p class="eyebrow">Your Assignment</p><h2 class="section-title">Inspect the working</h2>' +
-            '<p>Each item shows a worked derivative. Locate the first incorrect step, or choose Clean when every step is correct. Then classify the kind of slip.</p></div>' +
-            '<div class="legend">' + legendRows + '</div>' +
-          '</div>' +
-          '<div class="card stack">' +
-            '<div><p class="eyebrow">Student sign-in</p><h2 class="section-title">Join the round</h2></div>' +
-            '<div class="field"><label for="codeInput">Game code (from your teacher\'s screen)</label>' +
-              '<input id="codeInput" class="code-input" type="text" maxlength="6" placeholder="&mdash; &mdash; &mdash; &mdash;" value="'+esc(state.gameCode)+'" autocomplete="off" autocapitalize="characters" />' +
-              '<p style="font-size:0.71875rem; color:var(--ink-soft); margin:6px 2px 0;">Letters and numbers only &mdash; codes never use 0, 1, I, L, or O.</p></div>' +
-            '<div class="field"><label for="idInput">Your student ID</label>' +
-              '<input id="idInput" type="text" inputmode="numeric" maxlength="10" placeholder="e.g. 19136" value="'+esc(Engine.identity.studentId)+'" /></div>' +
-            '<div class="err" id="regErr">' + esc(state.joinError) + '</div>' +
-            '<button class="btn btn-flag" id="startBtn">Join the Marking Desk</button>' +
-          '</div>' +
-        '</div>' +
-        '<div class="register-leaderboard">' +
-          leaderboardPreview() +
-          '<div style="text-align:center;"><button class="link-quiet" id="toLbBtn">View full leaderboard &rarr;</button></div>' +
-          '<p class="foot-note">Completed rounds are recorded on the shared class leaderboard.</p>' +
-        '</div>' +
-      '</div>';
-  }
-
   function leaderboardPreview(){
     var rows = state.lbCache.slice(0,5);
     var body = rows.length ? rows.map(function(r,i){
@@ -481,21 +457,7 @@
   /* ---------------------------------------------------------------
      LOBBY
   ----------------------------------------------------------------*/
-  function viewLobby(){
-    var phase = Engine.session.derivePhase(state.game);
-    var msg = "Waiting for the host to start the round&hellip;";
-    if (phase === "ended") msg = "The last round ended. Waiting for the next one to start&hellip;";
-    return '' + masthead("Marking Desk Lobby") +
-      '<div class="card stack" style="text-align:center;">' +
-        '<div><p class="eyebrow">'+esc(Engine.identity.displayName)+' &middot; Period '+esc(Engine.identity.period)+'</p><h2 class="section-title">You&rsquo;re checked in</h2></div>' +
-        '<div class="lobby-status" style="justify-content:center;"><span class="pulse-dot"></span>'+msg+'</div>' +
-        '<p style="color:var(--ink-soft); font-size:0.84375rem;">Keep this tab open &mdash; the round starts for everyone at once.</p>' +
-      '</div>' +
-      '<div style="text-align:center; margin-top:16px;">' +
-        '<button class="link-quiet" id="toLbBtn">View full leaderboard &rarr;</button>' +
-        '<button class="link-quiet" id="switchCodeBtn" style="display:block; margin:6px auto 0;">Nothing happening? Switch game code</button>' +
-      '</div>';
-  }
+  function viewLobby(){ return Engine.join.lobby(state.gameCode); }
 
   /* ---------------------------------------------------------------
      JOINING A ROUND — all local from here on
@@ -513,6 +475,8 @@
     var plan = Engine.round.plan(game, alreadyPlaying);
     if (!plan) return;
 
+    state.score=0;state.streak=0;state.bestStreak=0;state.correct=0;state.attempted=0;state.misses={};
+    document.getElementById("bSaveStatus")?.remove();
     state.joinedRound     = plan.round;
     state.announcedEndsAt = game.gameEndsAt;
     state.localCountdownEnd = plan.countdownEnd;
@@ -537,6 +501,7 @@
   function currentCard(){ return state.deck[state.idx]; }
 
   function beginLocalRound(){
+    document.getElementById("bSaveStatus")?.remove();
     state.deck = buildDeck(); state.idx = 0; state.score = 0; state.streak = 0; state.bestStreak = 0;
     state.correct = 0; state.attempted = 0; state.misses = {}; state.answering = false;
     state.stage = "locate"; state.feedback = null; state.feedbackKind = null; state.icons = {steps:{}, clean:"", categories:{}};
@@ -831,7 +796,7 @@
   function refreshLeaderboard(){
     Engine.leaderboard.get(100).then(function(rows){
       state.lbCache = rows || []; state.lbLoaded = true;
-      if (state.screen === "leaderboard" || state.screen === "register") render();
+      if (state.screen === "leaderboard") render();
     }).catch(function(){ state.lbLoaded = true; });
   }
 
@@ -856,44 +821,7 @@
   ----------------------------------------------------------------*/
   function bind(){
     var el;
-    if ((el = document.getElementById("codeInput"))){
-      el.addEventListener("input", function(){
-        var pos = this.selectionStart; this.value = this.value.toUpperCase();
-        try { this.setSelectionRange(pos,pos); } catch(e){}
-      });
-    }
-    if ((el = document.getElementById("startBtn"))){
-      el.addEventListener("click", function(){
-        var btn = this;
-        var code = document.getElementById("codeInput").value.toUpperCase().replace(/[^A-Z0-9]/g,"");
-        var id = document.getElementById("idInput").value.trim();
-        var errEl = document.getElementById("regErr");
-        if (!code){ errEl.textContent = "Enter the game code your teacher projected."; return; }
-        if (!id){ errEl.textContent = "Enter your student ID."; return; }
-        errEl.textContent = "Checking…"; btn.disabled = true;
-        Promise.all([Engine.session.checkCode(code), Engine.identity.lookup(id)]).then(function(res){
-          btn.disabled = false;
-          var codeOk = res[0]; var idRes = res[1];
-          if (!codeOk){ errEl.textContent = "We couldn't find that game code. Double-check with your teacher."; return; }
-          if (!idRes || !idRes.found){ errEl.textContent = "That student ID isn't on the roster. Double-check the number."; return; }
-          errEl.textContent = "";
-          state.gameCode = code; state.joinError = "";
-          rememberCode(code);
-          startGamePolling(code);
-          state.screen = "briefing";
-          render();
-        }).catch(function(){
-          btn.disabled = false;
-          errEl.textContent = "Couldn't reach the game board — try again.";
-        });
-      });
-      Engine.ui.bindEnterFlow(
-        document.getElementById("codeInput"),
-        document.getElementById("idInput"),
-        function(){ document.getElementById("startBtn").click(); }
-      );
-    }
-    if ((el = document.getElementById("toLbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; render(); });
+    if ((el = document.getElementById("toLbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; refreshLeaderboard(); render(); });
     if ((el = document.getElementById("switchCodeBtn"))) el.addEventListener("click", function(){
       Engine.session.stopPolling();
       stopLobbyPresence();
@@ -906,7 +834,7 @@
     if ((el = document.getElementById("cleanChoice"))) el.addEventListener("click", function(){ handleLocate("clean"); });
     if ((el = document.getElementById("verdictGrid"))) el.addEventListener("click", function(e){ var btn=e.target.closest(".verdict-btn"); if(btn) handleCategory(btn.getAttribute("data-cat")); });
     if ((el = document.getElementById("againBtn"))) el.addEventListener("click", function(){ state.screen="lobby"; render(); });
-    if ((el = document.getElementById("lbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; render(); });
+    if ((el = document.getElementById("lbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; refreshLeaderboard(); render(); });
     if ((el = document.getElementById("backBtn"))) el.addEventListener("click", function(){ state.screen = state.gameCode ? "lobby" : "register"; render(); });
   }
 
@@ -964,30 +892,16 @@
         if (Date.now() >= state.localPlayEnd){ finishRun(); render(); return; }
       }
 
-      if (state.screen === "lobby") render();
+      // The stable lobby remains mounted while polling; details and focus stay intact.
     });
   }
 
   /* ---------------------------------------------------------------
      BOOT
   ----------------------------------------------------------------*/
-  if (Engine.identity.isLoggedIn() && state.gameCode && cachedCodeIsFresh()){
-    state.screen = "lobby";
-    startGamePolling(state.gameCode);
-  } else if (state.gameCode && !cachedCodeIsFresh()){
-    // Old enough that the teacher has likely moved on to a different code
-    // (next period, next day). Don't silently sit in a dead lobby — land
-    // back on register instead. Leave state.gameCode as-is so the code
-    // field shows the old value prefilled (one tap to re-join if it's
-    // still the same code), but clear the stored timestamp so we don't
-    // keep re-triggering this on every reload.
-    lsClear("spoterror_code_ts");
-  }
-  refreshLeaderboard();
-  // Only poll the leaderboard on screens that actually show it — this
-  // used to run every 15s on every device even mid-round.
+  state.screen="register"; state.gameCode="";
   setInterval(function(){
-    if (state.screen === "register" || state.screen === "leaderboard") refreshLeaderboard();
+    if (state.screen === "leaderboard") refreshLeaderboard();
   }, 15000);
   render();
 })();

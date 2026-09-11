@@ -149,8 +149,9 @@
     .pane{overflow-y:visible;}
   }
 </style>
+<link rel="stylesheet" href="../site.css">
 </head>
-<body>
+<body data-game="double-blind">
 <div id="gate" class="gate"></div>
 <div class="wrap">
   <div class="topbar">
@@ -168,17 +169,17 @@
   <div id="app"></div>
 </div>
 <!-- TODO resolved: the direct OpenGameArt listing URL was independently confirmed before release. -->
-<p class="credit">Music: &ldquo;Free Jump&rdquo; by <a href="https://opengameart.org/users/tad" target="_blank" rel="noopener">TAD</a>, from the <a href="https://opengameart.org/content/8-bit-pack-2" target="_blank" rel="noopener"><em>8-bit Pack 2</em></a> collection on OpenGameArt.org &mdash; licensed <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.</p>
+
+<script src="../config.js"></script>
+<script src="brand.js"></script>
 <script src="../engine.js"></script>
+<script src="../student.js"></script>
 <script src="questions.js"></script>
 <script>
 (function(){
 "use strict";
 
-Engine.configure({
-  appsScriptUrl:"https://script.google.com/macros/s/AKfycbwdGJAOLH5JskqJTckVxZuOGcu-nBAEj0DXe5M2tKcWHby4ZfVRM_1-IL11WA_g0iIr7Q/exec",
-  gameType:"double-blind"
-});
+Engine.configure({gameType: GAME_BRAND.gameType});
 
 
 function shuffle(arr){ var a=arr.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
@@ -536,41 +537,33 @@ function mmss(sec){ var m=Math.floor(sec/60),s=sec%60; return m+":"+(s<10?"0":""
 function showGate(html){ var gate=document.getElementById("gate"); gate.style.display="block"; gate.innerHTML=html; }
 function hideGate(){ document.getElementById("gate").style.display="none"; }
 function registerView(message){
-  showGate('<div class="gate-card"><div class="mono" style="font-size:11px;color:var(--ink-soft)">AP STATISTICS · PEER REVIEW DESK</div><img class="brand-logo" src="logo.png" alt="Double Blind" /><p>Complete methodologies and compare submissions under the room clock.</p><label>Game code</label><input id="codeInput" class="code-input" maxlength="6" value="'+esc(state.gameCode)+'"><label>Student ID</label><input id="idInput" inputmode="numeric" maxlength="10" value="'+esc(Engine.identity.studentId)+'"><div class="gate-error" id="joinError">'+esc(message||"")+'</div><button class="btn btn-wide" id="joinBtn">Begin Review Session</button></div>');
-  document.getElementById("joinBtn").onclick=joinGame;
-  Engine.ui.bindEnterFlow(
-    document.getElementById("codeInput"),
-    document.getElementById("idInput"),
-    function(){ document.getElementById("joinBtn").click(); }
-  );
+  var gate=document.getElementById("gate"); gate.style.display="block";
+  Engine.join.mount(gate,function(code){
+    state.gameCode=code; state.joinedRound=-1; gate.removeAttribute("data-finished");
+    lobbyView(); startPolling(code);
+  },message);
 }
 function lobbyView(){
-  showGate('<div class="gate-card" style="text-align:center"><div class="mono" style="font-size:11px;color:var(--ink-soft)">'+esc(Engine.identity.displayName)+' · PERIOD '+esc(Engine.identity.period)+'</div><h1>Checked In</h1><p><span style="color:var(--accept)">●</span> Waiting for the teacher to open the next review round.</p><p>Build cards allow revision after a three-second lock. Showdowns allow one pick and one reason. Only a completely correct first attempt extends your streak.</p><button class="btn btn-quiet" id="switchBtn">Switch Game Code</button></div>');
-  document.getElementById("switchBtn").onclick=function(){ Engine.session.stopPolling(); state.gameCode=""; localStorage.removeItem("doubleblind_code"); registerView(""); };
+  showGate(Engine.join.lobby(state.gameCode));
+  document.getElementById("switchCodeBtn").onclick=function(){Engine.session.stopPolling();state.gameCode="";registerView("");};
   sendLobbyPresence();
-}
-function joinGame(){
-  var code=document.getElementById("codeInput").value.toUpperCase().replace(/[^A-Z0-9]/g,""),id=document.getElementById("idInput").value.trim(),err=document.getElementById("joinError"),btn=document.getElementById("joinBtn");
-  if(!code||!id){ err.textContent="Enter both the projected code and your student ID."; return; }
-  btn.disabled=true; err.textContent="Checking…";
-  Promise.all([Engine.session.checkCode(code),Engine.identity.lookup(id)]).then(function(res){
-    if(!res[0]) throw new Error("code");
-    if(!res[1]||!res[1].found) throw new Error("student");
-    state.gameCode=code; localStorage.setItem("doubleblind_code",code); startPolling(code); lobbyView();
-  }).catch(function(e){ btn.disabled=false; err.textContent=e.message==="student"?"That student ID is not on the roster.":e.message==="code"?"That game code is not active.":"Could not reach the game board — try again."; });
 }
 function sendLobbyPresence(){
   if(!state.gameCode||!Engine.identity.isLoggedIn()) return;
   Engine.players.pushWaitingPresence({code:state.gameCode,studentId:Engine.identity.studentId,displayName:Engine.identity.displayName,period:Engine.identity.period});
 }
-setInterval(function(){ if(document.getElementById("gate").style.display!=="none") sendLobbyPresence(); },LOBBY_HEARTBEAT_MS);
+setInterval(function(){ if(document.getElementById("gate").querySelector(".b-lobby")) sendLobbyPresence(); },LOBBY_HEARTBEAT_MS);
 function enterRound(game){
   var plan=Engine.round.plan(game,state.joinedRound!==-1); if(!plan||plan.round===state.joinedRound) return;
+  state.score=0;state.streak=0;state.bestStreak=0;state.resolvedCount=0;state.correctCount=0;
+  document.getElementById("bSaveStatus")?.remove();
   state.joinedRound=plan.round; state.announcedEndsAt=game.gameEndsAt; state.localCountdownEnd=plan.countdownEnd; state.localPlayEnd=plan.playEnd; state.joinedLate=plan.late; state.joinedSeconds=plan.secondsAvailable;
   if(plan.countdownEnd){ showGate(Engine.ui.maskHtml(plan.countdownEnd,"Review begins in","The next case file is arriving at your desk.")); state.countdownHandle=Engine.round.runCountdown(plan.countdownEnd,function(n){Engine.ui.setMaskNum(n);},beginRound); }
   else beginRound();
 }
 function beginRound(){
+  document.getElementById("bSaveStatus")?.remove();
+  document.getElementById("gate").removeAttribute("data-finished");
   state.countdownHandle=null; state.deck=buildDeck(); state.idx=0; state.score=0; state.streak=0; state.bestStreak=0; state.resolvedCount=0; state.correctCount=0; resetCardState(); hideGate(); pushPlayerProgress(true); render();
   clearInterval(state.timerId); state.timerId=setInterval(roundTick,250); roundTick();
 }
@@ -603,12 +596,15 @@ function startPolling(code){
     state.game=game; meta=meta||{};
     if(!game){ state.gameCode=""; localStorage.removeItem("doubleblind_code"); registerView(meta.retired?"Your teacher started a different game — enter the new code.":"That game is no longer active."); return; }
     if(game.round!==state.joinedRound){ var phase=Engine.session.derivePhase(game); if(phase==="countdown"||phase==="live"){ if(state.countdownHandle)state.countdownHandle.cancel(); clearInterval(state.timerId); enterRound(game); return; } }
-    if(state.joinedRound===game.round&&state.localPlayEnd&&game.gameEndsAt<state.announcedEndsAt-1000){ state.localPlayEnd=Math.min(state.localPlayEnd,game.gameEndsAt); }
+    if(state.joinedRound===game.round&&state.localPlayEnd&&game.gameEndsAt<state.announcedEndsAt-1000){
+      state.localPlayEnd=Math.min(state.localPlayEnd,game.gameEndsAt);
+      if(state.countdownHandle){state.countdownHandle.cancel();state.countdownHandle=null;}
+      if(Date.now()>=state.localPlayEnd){clearInterval(state.timerId);finishRun();}
+    }
   });
 }
 if(/[?&]selftest(?:=1)?(?:&|$)/.test(location.search)) randomizationSelfTest();
-state.gameCode=localStorage.getItem("doubleblind_code")||"";
-if(Engine.identity.isLoggedIn()&&state.gameCode){ startPolling(state.gameCode); lobbyView(); } else registerView("");
+state.gameCode=""; registerView("");
 })();
 </script>
 </body>
