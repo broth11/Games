@@ -137,6 +137,48 @@ function plotState(page){
   return {visual:item.visual,selector:`[data-choice="${choice.dataset.choice}"]`};
 }
 
+function chooseSelect(page,select,value){
+  const element=page.document.querySelector(select);assert(element,'Missing select '+select);
+  Object.defineProperty(element,'value',{value:String(value),writable:true,configurable:true});
+  element.dispatchEvent(new page.Event('change',{bubbles:true}));
+}
+
+function doublePracticeAnswer(page,correct){
+  const title=page.document.querySelector('h2.title')?.textContent;
+  const card=page.sandbox.CARDS.find(item=>item.title===title);assert(card,'Current Double-Blind card is in the bank');
+  if(card.kind==='build'){
+    page.document.querySelectorAll('select[data-field]').forEach((select,index)=>{
+      const options=[...select.querySelectorAll('option')];
+      const wanted=correct?card.fields[index].correctText:options.find(option=>option.value&&option.textContent!==card.fields[index].correctText).textContent;
+      const option=options.find(item=>item.textContent===wanted);chooseSelect(page,`select[data-field="${index}"]`,option.value);
+    });
+    page.click('#submitBtn');page.click('#submitBtn');
+  }else{
+    const stronger=[...page.document.querySelectorAll('[data-pick]')].find(button=>page.document.getElementById('ms'+button.dataset.pick).textContent.includes(card.strongerText)).dataset.pick;
+    const pick=correct?stronger:(stronger==='A'?'B':'A');page.click(`[data-pick="${pick}"]`);page.click(`[data-pick="${pick}"]`);
+    const reason=[...page.document.querySelectorAll('[data-reason]')].find(button=>correct?button.textContent===card.correctReasonText:button.textContent!==card.correctReasonText);
+    page.click(`[data-reason="${reason.dataset.reason}"]`);page.click(`[data-reason="${reason.dataset.reason}"]`);
+  }
+}
+
+function spotPracticeAnswer(page,correct){
+  const text=page.document.getElementById('app').textContent;
+  const card=page.sandbox.BANK.find(item=>text.includes(item.given));assert(card,'Current Spot the Error problem is in the bank');
+  if(!correct){
+    if(card.errorStepIndex===null)page.click('[data-step-index="0"]');else page.click('#cleanChoice');
+  }else if(card.errorStepIndex===null)page.click('#cleanChoice');
+  else {page.click(`[data-step-index="${card.errorStepIndex}"]`);page.click(`[data-cat="${card.errorCategory}"]`);}
+  const repeat=card.errorStepIndex===null?'#cleanChoice':correct?`[data-cat="${card.errorCategory}"]`:'#cleanChoice';
+  page.click(repeat);
+}
+
+function skewPracticeAnswer(page,correct){
+  const handle=page.document.querySelector('.post-handle')?.textContent;
+  const card=page.sandbox.BANK.find(item=>item.handle===handle);assert(card,'Current Skew the Feed post is in the bank');
+  const choice=correct?card.cat:Object.keys({under:1,nonresponse:1,voluntary:1,wording:1,clean:1}).find(key=>key!==card.cat);
+  page.click(`[data-cat="${choice}"]`);page.click(`[data-cat="${choice}"]`);
+}
+
 for(const slug of ['spot-the-error','double-blind','skew-the-feed']){
   const clock=new Clock(),storage=new Store(),api=new MockApi(clock),host=page(slug+'/host.html',clock,storage,api,'?mode=demo');
   host.click('[data-action="create"]');await clock.advance(100);
@@ -221,7 +263,7 @@ for(const slug of ['spot-the-error','double-blind','skew-the-feed']){
 
 {
   const clock=new Clock(),storage=new Store(),api=new MockApi(clock),practice=page('plot-twist/index.html',clock,storage,api,'?practice=1');
-  assert.match(practice.document.getElementById('app').textContent,/Untimed · no ID required · no scores sent/);
+  assert.match(practice.document.getElementById('app').textContent,/Untimed Practice · no ID required · no scores sent/);
   assert.equal(api.calls.length,0,'Opening Plot Twist practice does not contact the classroom API');
   practice.click('#practiceStart');
   const imageRefs=new Set();
@@ -238,6 +280,59 @@ for(const slug of ['spot-the-error','double-blind','skew-the-feed']){
   assert.equal(api.calls.length,0,'Completing all 132 practice decisions sends no classroom writes');
   assert.deepEqual([...imageRefs].sort(),['graphics/aim-and-scatter.svg','graphics/axis-of-deception.svg','graphics/lunch-vote.svg','graphics/parts-of-a-whole.svg','graphics/two-rules.svg']);
   console.log('PASS plot-twist practice: all 132 decisions render, every bundled statistical graphic is reached, and no scores are sent.');
+}
+
+for(const spec of [
+  {slug:'double-blind',filter:'1',total:10,all:30,next:'#nextBtn',answer:doublePracticeAnswer},
+  {slug:'spot-the-error',filter:'conceptual',total:6,all:54,next:'#practiceNextBtn',answer:spotPracticeAnswer},
+  {slug:'skew-the-feed',filter:'voluntary',total:7,all:45,next:'#practiceNextBtn',answer:skewPracticeAnswer}
+]){
+  {
+    const clock=new Clock(),storage=new Store(),api=new MockApi(clock),all=page(spec.slug+'/index.html',clock,storage,api,'?practice=1');
+    assert.match(all.document.body.textContent,/Untimed Practice/);
+    assert.match(all.document.querySelector('#practiceTopic option').textContent,/All content/);
+    all.click('#practiceStartBtn');
+    assert.match(all.document.querySelector('.practice-progress').textContent,new RegExp('1 of '+spec.all));
+    await clock.advance(400000);
+    assert.match(all.document.querySelector('.practice-progress').textContent,new RegExp('1 of '+spec.all),'Practice survives beyond a classroom round without advancing');
+    assert.equal(api.calls.length,0,'All-content practice never contacts the backend');
+  }
+
+  const clock=new Clock(),storage=new Store(),api=new MockApi(clock);
+  storage.setItem('games:remembered',JSON.stringify('9001'));
+  storage.setItem('games:pending:OLD:1:9001',JSON.stringify({gameType:spec.slug==='spot-the-error'?'spot-the-error-derivatives':spec.slug,code:'OLD',round:1,studentId:'9001',score:10}));
+  const practice=page(spec.slug+'/index.html',clock,storage,api,'?practice=1');
+  assert(practice.document.querySelectorAll('#practiceTopic option').length>1,'Practice offers an authored content selector');
+  chooseSelect(practice,'#practiceTopic',spec.filter);practice.click('#practiceStartBtn');
+  assert.match(practice.document.querySelector('.practice-progress').textContent,new RegExp('1 of '+spec.total));
+  spec.answer(practice,false);
+  assert(practice.document.querySelector(spec.next),'Incorrect feedback waits for manual advancement');
+  await clock.advance(20000);
+  assert(practice.document.querySelector(spec.next),'Feedback remains visible without automatic advancement');
+  practice.click(spec.next);
+  for(let guard=0;guard<spec.total+2&&!/Practice Complete/i.test(practice.document.getElementById('app').textContent);guard++){
+    spec.answer(practice,true);
+    assert(practice.document.querySelector(spec.next),'Correct feedback provides manual advancement');
+    practice.click(spec.next);
+  }
+  const results=practice.document.getElementById('app').textContent;
+  assert.match(results,/Practice Complete/i);
+  assert.match(results,new RegExp(String(spec.total)+'Attempts','i'),'Completion reports every attempted item once');
+  assert.match(results,/Topics? to revisit|Content bands to revisit/i);
+  assert(practice.document.getElementById('practiceAgainBtn'),'Completion offers replay');
+  assert(practice.document.getElementById('practiceChooseBtn'),'Completion offers a different selection');
+  assert.equal(practice.document.getElementById('practiceAgainBtn').closest('.summary,.card').querySelector('a[href="index.html"]').textContent,'Classroom entry');
+  assert.equal(api.calls.length,0,'Practice ignores saved identity and pending classroom data without reads or writes');
+  practice.click('#practiceChooseBtn');
+  assert(practice.document.getElementById('practiceTopic'),'Choose different content returns to the selector');
+  chooseSelect(practice,'#practiceTopic',spec.filter);practice.click('#practiceStartBtn');
+  for(let guard=0;guard<spec.total+2&&!/Practice Complete/i.test(practice.document.getElementById('app').textContent);guard++){
+    spec.answer(practice,true);practice.click(spec.next);
+  }
+  assert.match(practice.document.getElementById('app').textContent,/Practice Complete/i);
+  practice.click('#practiceAgainBtn');
+  assert.match(practice.document.querySelector('.practice-progress').textContent,new RegExp('1 of '+spec.total),'Replay starts a fresh finite practice deck');
+  console.log('PASS',spec.slug,'practice: visible setup, all/topic decks, untimed manual feedback, duplicate protection, completion/replay, and zero backend traffic.');
 }
 
 {

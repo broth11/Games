@@ -214,6 +214,7 @@
 
   // ---- one-time config for this game ----
   Engine.configure({gameType: GAME_BRAND.gameType});
+  var practice = new URLSearchParams(location.search).has("practice");
 
   var POLL_MS = 1500;          // lobby / play poll cadence (engine adds jitter)
   var PROGRESS_FLUSH_MS = 5000; // coalesce live-score writes to protect the backend
@@ -251,15 +252,17 @@
     deck: [], idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, attempted: 0, misses: {},
     secondsLeft: 0, timerId: null, answering: false, answerTimer: null, countdownHandle: null,
 
-    lbCache: [], lbLoaded: false
+    lbCache: [], lbLoaded: false,
+    practiceFilter:"all"
   };
 
   function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
   function shuffle(arr){ var a=arr.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
-  function buildDeck(){
-    var t1=shuffle(BANK.filter(function(c){return c.tier===1;}));
-    var t2=shuffle(BANK.filter(function(c){return c.tier===2;}));
-    var t3=shuffle(BANK.filter(function(c){return c.tier===3;}));
+  function buildDeck(filter){
+    var available=filter&&filter!=="all"?BANK.filter(function(c){return c.cat===filter;}):BANK;
+    var t1=shuffle(available.filter(function(c){return c.tier===1;}));
+    var t2=shuffle(available.filter(function(c){return c.tier===2;}));
+    var t3=shuffle(available.filter(function(c){return c.tier===3;}));
     return t1.concat(t2,t3);
   }
   function mmss(sec){ var m=Math.floor(sec/60), s=sec%60; return m+":"+(s<10?"0":"")+s; }
@@ -302,6 +305,9 @@
   ----------------------------------------------------------------*/
   function render(){
     var app = document.getElementById("app");
+    if (state.screen === "practice-setup") {
+      stopLobbyPresence(); document.body.classList.remove("b-joining"); document.body.classList.remove("play-active"); app.innerHTML=viewPracticeSetup(); app.querySelector('#practiceTopic option[value="'+state.practiceFilter+'"]').setAttribute('selected',''); bind(); return;
+    }
     if (state.screen === "register") {
       stopLobbyPresence();
       Engine.join.mount(app,function(code){state.gameCode=code;state.joinedRound=-1;state.joinError="";rememberCode(code);state.screen="lobby";render();startGamePolling(code);refreshLeaderboard();},state.joinError);
@@ -354,6 +360,15 @@
      LOBBY
   ----------------------------------------------------------------*/
   function viewLobby(){return Engine.join.lobby(state.gameCode);}
+
+  function viewPracticeSetup(){
+    return masthead("Independent newsroom")+'<section class="practice-setup"><p class="eyebrow">No room, ID, timer, or submitted score</p><h1>Untimed Practice</h1><p>Classify complete posts, read the correction, and move on when you are ready.</p><label for="practiceTopic">Bias topic</label><select id="practiceTopic"><option value="all">All content · '+BANK.length+' posts</option>'+CAT_ORDER.map(function(key){var count=BANK.filter(function(item){return item.cat===key;}).length;return '<option value="'+key+'">'+esc(CATS[key].label)+' · '+count+' posts</option>';}).join('')+'</select><div class="practice-actions"><button class="btn btn-flag" id="practiceStartBtn">Start reviewing</button><a class="btn btn-ghost" href="index.html">Return to classroom entry</a></div></section>';
+  }
+
+  function startPractice(filter){
+    practice=true;stopLobbyPresence();Engine.session.stopPolling();clearInterval(state.timerId);clearTimeout(state.answerTimer);state.answerTimer=null;
+    state.practiceFilter=filter||"all";state.gameCode="";state.joinedRound=-1;state.deck=buildDeck(state.practiceFilter);state.idx=0;state.score=0;state.streak=0;state.bestStreak=0;state.correct=0;state.attempted=0;state.misses={};state.answering=false;state.screen="play";render();
+  }
 
   /* ---------------------------------------------------------------
      JOINING A ROUND — all local from here on
@@ -425,7 +440,7 @@
   }
 
   function viewPlay(){
-    if (state.idx >= state.deck.length) state.deck = state.deck.concat(shuffle(BANK));
+    if (state.idx >= state.deck.length){if(practice){state.screen="results";return viewResults();}state.deck = state.deck.concat(shuffle(BANK));}
     var card = currentCard();
     var total = state.joinedSeconds || 1;
     var pct = Math.max(0, Math.min(100, Math.round((state.secondsLeft/total)*100)));
@@ -440,16 +455,12 @@
     var lateNote = state.joinedLate
       ? '<div class="late-note">Joined mid-shift &mdash; you have the '+mmss(state.joinedSeconds)+' left on the room clock.</div>'
       : '';
+    var playHeader=practice
+      ? '<div class="play-header"><div class="practice-progress">Untimed Practice · Post '+(state.idx+1)+' of '+state.deck.length+'</div><div class="hud"><div class="hud-block">Practice Points<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div><div class="hud-block">Correct<span class="hud-num mono" id="streakNum">'+state.correct+'/'+state.attempted+'</span></div><div class="hud-block">Time<span class="hud-num mono">UNTIMED</span></div></div></div>'
+      : '<div class="play-header"><div class="hud"><div class="hud-block">Score<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div><div class="hud-block">Streak<span class="hud-num mono" id="streakNum">'+state.streak+'</span></div><div class="hud-block">Time Left<span class="hud-num mono" id="secLeft">'+mmss(state.secondsLeft)+'</span></div></div><div class="timerbar"><div class="timerfill" id="timerFill" style="width:'+pct+'%; background:'+barColor+';"></div></div></div>';
     return '' +
       '<div class="play-shell">' +
-        '<div class="play-header">' +
-          '<div class="hud">' +
-            '<div class="hud-block">Score<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div>' +
-            '<div class="hud-block">Streak<span class="hud-num mono" id="streakNum">'+state.streak+'</span></div>' +
-            '<div class="hud-block">Time Left<span class="hud-num mono" id="secLeft">'+mmss(state.secondsLeft)+'</span></div>' +
-          '</div>' +
-          '<div class="timerbar"><div class="timerfill" id="timerFill" style="width:'+pct+'%; background:'+barColor+';"></div></div>' +
-        '</div>' +
+        playHeader +
         '<div class="play-main">' +
           lateNote +
           '<div class="postcard" id="postcard">' +
@@ -485,13 +496,13 @@
     var isCorrect = (cat === card.cat);
     if (isCorrect){
       state.correct += 1; state.streak += 1; state.bestStreak = Math.max(state.bestStreak, state.streak);
-      var bonus = state.streak >= 3 ? (state.streak-2)*5 : 0;
+      var bonus = !practice && state.streak >= 3 ? (state.streak-2)*5 : 0;
       state.score += TIER_POINTS[card.tier] + bonus;
     } else {
       state.streak = 0; state.misses[card.cat] = (state.misses[card.cat]||0)+1;
     }
     document.getElementById("scoreNum").textContent = state.score;
-    document.getElementById("streakNum").textContent = state.streak;
+    document.getElementById("streakNum").textContent = practice ? state.correct+"/"+state.attempted : state.streak;
     Array.prototype.forEach.call(document.querySelectorAll(".verdict-btn"), function(b){ b.disabled = true; });
     var overlay = document.getElementById("stampOverlay"); var stampEl = document.getElementById("stampEl");
     stampEl.className = "stamp "+(isCorrect?"correct":"wrong");
@@ -510,6 +521,11 @@
     }
     pushPlayerProgress();
     clearTimeout(state.answerTimer);
+    if(practice){
+      document.getElementById("verdictGrid").insertAdjacentHTML("afterend",'<button class="btn btn-flag practice-next" id="practiceNextBtn">Next post →</button>');
+      document.getElementById("practiceNextBtn").onclick=nextPracticeItem;
+      return;
+    }
     state.answerTimer = setTimeout(function(){
       state.answerTimer = null;
       if (state.screen !== "play") return;   // a force-end landed while reading
@@ -519,7 +535,15 @@
     }, isCorrect ? 1500 : 4000);
   }
 
+  function nextPracticeItem(){
+    if(!practice||!state.answering)return;
+    state.idx++;state.answering=false;
+    if(state.idx>=state.deck.length)state.screen="results";
+    render();
+  }
+
   function finishRun(){
+    if(practice){state.screen="results";render();return;}
     if (state.screen === "results") return;   // already filed — don't double-save
     state.screen = "results";
     clearTimeout(state.answerTimer); state.answerTimer = null;
@@ -542,7 +566,7 @@
   var progTimer = null, progDirty = false;
 
   function pushPlayerProgress(force){
-    if (!state.gameCode || state.joinedRound < 0) return;
+    if (practice || !state.gameCode || state.joinedRound < 0) return;
     progDirty = true;
     if (force){ clearTimeout(progTimer); progTimer = null; flushProgress(); return; }
     if (progTimer) return;
@@ -610,6 +634,9 @@
     var shortNote = state.joinedLate
       ? '<div class="short-run">You joined this shift with '+mmss(state.joinedSeconds)+' left on the room clock, so this was a short run &mdash; the score reflects the time you had, not how you\'d do with a full shift.</div>'
       : '';
+    if(practice){
+      return masthead("Untimed Practice Complete")+'<div class="card"><div class="score-hero"><div class="score-num mono">'+accuracy+'%</div><div class="score-cap">Accuracy</div></div><div class="stat-row"><div class="stat-tile"><span class="n">'+state.correct+'</span><span class="l">Correct answers</span></div><div class="stat-tile"><span class="n">'+state.attempted+'</span><span class="l">Attempts</span></div><div class="stat-tile"><span class="n">'+state.score+'</span><span class="l">Practice points</span></div></div><div class="corrections"><p class="eyebrow">Topics to revisit</p>'+corrRows+'</div><div class="practice-actions"><button class="btn btn-flag" id="practiceAgainBtn">Practice again</button><button class="btn btn-ghost" id="practiceChooseBtn">Choose different content</button><a class="btn btn-ghost" href="index.html">Classroom entry</a></div></div>';
+    }
     return '' + masthead("Final Edition") +
       '<div class="card">' +
         '<div class="score-hero"><div class="score-cap">'+esc(Engine.identity.displayName)+' &middot; Period '+esc(Engine.identity.period)+'</div>' +
@@ -659,6 +686,9 @@
   ----------------------------------------------------------------*/
   function bind(){
     var el;
+    if ((el = document.getElementById("practiceStartBtn"))) el.addEventListener("click", function(){startPractice(document.getElementById("practiceTopic").value);});
+    if ((el = document.getElementById("practiceAgainBtn"))) el.addEventListener("click", function(){startPractice(state.practiceFilter);});
+    if ((el = document.getElementById("practiceChooseBtn"))) el.addEventListener("click", function(){state.screen="practice-setup";render();});
     if ((el = document.getElementById("toLbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; refreshLeaderboard(); render(); });
     if ((el = document.getElementById("switchCodeBtn"))) el.addEventListener("click", function(){
       Engine.session.stopPolling();
@@ -735,7 +765,7 @@
   /* ---------------------------------------------------------------
      BOOT
   ----------------------------------------------------------------*/
-  state.screen="register"; state.gameCode="";
+  state.screen=practice?"practice-setup":"register"; state.gameCode="";
   // Only poll the leaderboard on screens that actually show it — this
   // used to run every 15s on every device even mid-round.
   setInterval(function(){

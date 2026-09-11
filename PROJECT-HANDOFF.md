@@ -13,6 +13,8 @@ The replacement architecture:
 - **Google Apps Script**, attached to that Sheet, is deployed as a tiny web API. The GitHub-hosted pages call it over HTTP (`fetch`) to read and write the Sheet.
 - **A shared `engine.js`** file holds everything common to every game — student identity, game codes, the round clock, and score syncing — so a second, third, or tenth game reuses it instead of rebuilding it.
 
+Student pages also provide independent **Untimed Practice**. See [`PRACTICE.md`](PRACTICE.md) for direct links, no-write guarantees, content selectors, and question-bank mapping limitations.
+
 This trades some things away compared to a "real" realtime backend (Firebase/Supabase, etc.): there's no push/realtime channel, so every page polls the backend on a timer rather than getting instant updates. In practice this is invisible for a classroom-sized game, but it's why some of the internals below are built around wall-clock timestamps instead of live push events.
 
 ## 2. Repository / folder structure

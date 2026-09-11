@@ -180,6 +180,7 @@
 "use strict";
 
 Engine.configure({gameType: GAME_BRAND.gameType});
+var practice = new URLSearchParams(location.search).has("practice");
 
 
 function shuffle(arr){ var a=arr.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
@@ -195,9 +196,10 @@ function instantiate(card){
   }
   return copy;
 }
-function buildDeck(){
+function buildDeck(filter){
   var out=[];
   [1,2,3].forEach(function(tier){
+    if(filter && filter!=="all" && String(tier)!==String(filter)) return;
     var builds=shuffle(CARDS.filter(function(c){return c.tier===tier&&c.kind==="build";}));
     var shows=shuffle(CARDS.filter(function(c){return c.tier===tier&&c.kind==="showdown";}));
     var n=Math.max(builds.length,shows.length);
@@ -242,14 +244,17 @@ var state = {
   showdownReasonAnswered: false,
   deck:[], screen:"register", gameCode:"", game:null, joinError:"", joinedRound:-1,
   announcedEndsAt:0, localCountdownEnd:0, localPlayEnd:0, joinedLate:false, joinedSeconds:0,
-  secondsLeft:0, timerId:null, countdownHandle:null, lockTimer:null
+  secondsLeft:0, timerId:null, countdownHandle:null, lockTimer:null,
+  practiceFilter:"all", practiceMisses:{}
 };
 
 function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
 function renderDots(){
-  var html = state.deck.slice(0,CARDS.length).map(function(c, i){
-    var cls = (state.idx%CARDS.length)>i ? "done" : ((state.idx%CARDS.length)===i ? "current" : "");
+  var visible=practice?state.deck:state.deck.slice(0,CARDS.length);
+  var position=practice?state.idx:(state.idx%CARDS.length);
+  var html = visible.map(function(c, i){
+    var cls = position>i ? "done" : (position===i ? "current" : "");
     return '<div class="dot ' + cls + '"></div>';
   }).join("");
   document.getElementById("dots").innerHTML = html;
@@ -258,6 +263,7 @@ function renderDots(){
 function renderMeta(){
   document.getElementById("scoreNum").textContent = state.score;
   document.getElementById("streakNum").textContent = state.streak;
+  if(practice) document.getElementById("timeNum").textContent = "UNTIMED";
 }
 
 function resetCardState(){
@@ -272,7 +278,7 @@ function render(){
   renderDots();
   renderMeta();
   if(!state.deck.length) return;
-  if (state.idx >= state.deck.length) state.deck=state.deck.concat(buildDeck());
+  if (state.idx >= state.deck.length){ if(practice){renderSummary();return;} state.deck=state.deck.concat(buildDeck()); }
   var card = state.deck[state.idx];
   if (card.kind === "build") renderBuild(card);
   else renderShowdown(card);
@@ -296,6 +302,7 @@ function renderBuild(card){
   app.innerHTML =
     '<div class="folder">' +
       '<div class="folder-head">' +
+        (practice?'<div class="practice-progress">Untimed Practice · '+(state.idx+1)+' of '+state.deck.length+'</div>':'')+
         '<span class="kind-tag build mono">Build \u00b7 Complete the Methodology</span>' +
         '<h2 class="title">' + esc(card.title) + '</h2>' +
       '</div>' +
@@ -348,6 +355,7 @@ function bindBuild(card){
 }
 
 function submitBuild(card){
+  if(state.resolved||state.locked)return;
   var selects = document.querySelectorAll('select[data-field]');
   var wrong = 0;
   selects.forEach(function(sel, i){
@@ -378,6 +386,16 @@ function submitBuild(card){
     renderMeta();
     pushPlayerProgress();
   } else {
+    if(practice){
+      state.resolvedCount++; state.streak=0; state.resolved=true;
+      state.practiceMisses[card.tier]=(state.practiceMisses[card.tier]||0)+1;
+      var corrections=card.fields.map(function(field){return '<b>'+esc(field.label)+':</b> '+esc(field.correctText);}).join('<br>');
+      slot.innerHTML='<div class="verdict bad"><span class="stamp-word">Review</span><span class="detail">'+wrong+' of '+n+' fields need revision.<br>'+corrections+'</span></div>';
+      selects.forEach(function(sel){sel.disabled=true;});
+      document.getElementById("submitBtn").style.display="none";
+      document.getElementById("nextBtn").style.display="block";
+      renderMeta();return;
+    }
     slot.innerHTML = '<div class="verdict mid"><span class="stamp-word">Revise</span>' +
       '<span class="detail">' + wrong + ' of ' + n + ' fields need revision. Adjust and resubmit once the lockout clears.</span></div>';
     state.attempt++;
@@ -410,6 +428,7 @@ function renderShowdown(card){
   app.innerHTML =
     '<div class="folder">' +
       '<div class="folder-head">' +
+        (practice?'<div class="practice-progress">Untimed Practice · '+(state.idx+1)+' of '+state.deck.length+'</div>':'')+
         '<span class="kind-tag showdown mono">Showdown \u00b7 Compare Submissions</span>' +
         '<h2 class="title">' + esc(card.title) + '</h2>' +
         '<p class="subquestion">' + esc(card.question) + '</p>' +
@@ -495,6 +514,7 @@ function answerReason(card, choiceIdx){
     state.bestStreak = Math.max(state.bestStreak, state.streak);
   } else {
     state.streak = 0;
+    if(practice) state.practiceMisses[card.tier]=(state.practiceMisses[card.tier]||0)+1;
   }
 
   document.getElementById("explainSlot").innerHTML =
@@ -511,12 +531,20 @@ function answerReason(card, choiceIdx){
 function nextCard(){
   state.idx++;
   resetCardState();
+  if(practice&&state.idx>=state.deck.length){renderSummary();return;}
   render();
 }
 
 function renderSummary(){
   var accuracy = state.resolvedCount ? Math.round((state.correctCount / state.resolvedCount) * 100) : 0;
   var app = document.getElementById("app");
+  if(practice){
+    var misses=Object.keys(state.practiceMisses).sort().map(function(tier){return '<li>Tier '+tier+' · '+state.practiceMisses[tier]+' case'+(state.practiceMisses[tier]===1?'':'s')+' to revisit</li>';}).join('');
+    app.innerHTML='<div class="folder"><div class="summary"><div class="practice-progress">Untimed Practice Complete</div><div class="big serif mono">'+accuracy+'%</div><div class="cap">Accuracy</div><div class="stat-row"><div class="stat-tile"><span class="n mono">'+state.correctCount+'</span><span class="l">Fully correct</span></div><div class="stat-tile"><span class="n mono">'+state.resolvedCount+'</span><span class="l">Attempts</span></div><div class="stat-tile"><span class="n mono">'+state.score+'</span><span class="l">Practice points</span></div></div><div class="practice-results-note">'+(misses?'<b>Content bands to revisit</b><ul class="practice-results-list">'+misses+'</ul>':'No missed content bands recorded.')+'</div><div class="practice-actions"><button class="btn" id="practiceAgainBtn">Practice again</button><button class="btn btn-quiet" id="practiceChooseBtn">Choose different content</button><a class="btn btn-quiet" href="index.html">Classroom entry</a></div></div></div>';
+    document.getElementById('practiceAgainBtn').onclick=function(){startPractice(state.practiceFilter);};
+    document.getElementById('practiceChooseBtn').onclick=showPracticeSetup;
+    return;
+  }
   app.innerHTML =
     '<div class="folder"><div class="summary">' +
       '<div class="big serif mono">' + state.score + '</div>' +
@@ -536,6 +564,17 @@ function renderSummary(){
 function mmss(sec){ var m=Math.floor(sec/60),s=sec%60; return m+":"+(s<10?"0":"")+s; }
 function showGate(html){ var gate=document.getElementById("gate"); gate.style.display="block"; gate.innerHTML=html; }
 function hideGate(){ document.getElementById("gate").style.display="none"; }
+function showPracticeSetup(){
+  clearInterval(state.timerId);clearInterval(state.lockTimer);state.screen="practice-setup";
+  showGate('<section class="practice-setup"><span class="kind-tag build mono">Independent study</span><h1>Untimed Practice</h1><p>No room code or student ID. Nothing is sent to the classroom scoreboard.</p><label for="practiceTopic">Content band</label><select id="practiceTopic"><option value="all">All content · '+CARDS.length+' case files</option>'+[1,2,3].map(function(tier){return '<option value="'+tier+'">Tier '+tier+' · '+CARDS.filter(function(card){return card.tier===tier;}).length+' case files</option>';}).join('')+'</select><div class="practice-actions"><button class="btn" id="practiceStartBtn">Start reviewing</button><a class="btn btn-quiet" href="index.html">Return to classroom entry</a></div></section>');
+  document.querySelector('#practiceTopic option[value="'+state.practiceFilter+'"]').setAttribute('selected','');
+  document.getElementById('practiceStartBtn').onclick=function(){startPractice(document.getElementById('practiceTopic').value);};
+}
+function startPractice(filter){
+  practice=true;state.practiceFilter=filter||"all";state.gameCode="";state.joinedRound=-1;state.deck=buildDeck(state.practiceFilter);state.idx=0;state.score=0;state.streak=0;state.bestStreak=0;state.resolvedCount=0;state.correctCount=0;state.practiceMisses={};resetCardState();
+  document.querySelector('.brand .sub').textContent='Peer Review Desk · Untimed Practice';hideGate();render();
+  var labels=document.querySelectorAll('.meta .l');labels[0].textContent='practice points';labels[1].textContent='practice streak';labels[2].textContent='time';
+}
 function registerView(message){
   var gate=document.getElementById("gate"); gate.style.display="block";
   Engine.join.mount(gate,function(code){
@@ -604,7 +643,7 @@ function startPolling(code){
   });
 }
 if(/[?&]selftest(?:=1)?(?:&|$)/.test(location.search)) randomizationSelfTest();
-state.gameCode=""; registerView("");
+state.gameCode=""; if(practice)showPracticeSetup();else registerView("");
 })();
 </script>
 </body>

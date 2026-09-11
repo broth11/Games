@@ -68,4 +68,14 @@ for(const ref of referencedGraphics)assert(fs.existsSync(path.join(plotRoot,ref)
 const launcher=fs.readFileSync(path.join(root,'index.html'),'utf8');
 assert.match(launcher,/href="plot-twist\/index\.html"/,'Launcher needs a Plot Twist student link');
 assert.match(launcher,/href="plot-twist\/host\.html"/,'Launcher needs a Plot Twist teacher-host link');
+const studentRuntime=fs.readFileSync(path.join(root,'student.js'),'utf8');
+assert.match(studentRuntime,/href="\?practice=1">Untimed Practice/,'Shared student entry needs a visible practice link');
+for(const slug of ['spot-the-error','double-blind','skew-the-feed']){
+  const html=fs.readFileSync(path.join(root,slug,'index.html'),'utf8');
+  assert.match(html,/URLSearchParams\(location\.search\)\.has\("practice"\)/,slug+' needs direct practice URL support');
+  assert.match(html,/Untimed Practice/,slug+' needs a clearly labelled practice mode');
+  assert(!/audio(?:-b)?\.js/.test(html),slug+' student practice must remain silent');
+}
+assert.match(fs.readFileSync(path.join(plotRoot,'index.html'),'utf8'),/href="\?practice=1">Untimed Practice/,'Plot Twist needs a visible practice link');
+assert(fs.existsSync(path.join(root,'PRACTICE.md')),'Practice behavior and metadata mapping must be documented');
 console.log('PASS static production audit: four games, stable identifiers, and complete local assets.');

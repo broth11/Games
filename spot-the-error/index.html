@@ -210,6 +210,12 @@
   .play-explanation{grid-column:2; grid-row:3; min-height:0; overflow:hidden; position:relative;}
   .play-explanation .explain{display:block; height:100%; margin:0; border:1px solid var(--rule); border-radius:10px; overflow-y:auto; overscroll-behavior:contain;}
   .play-explanation .explain-empty{display:flex; align-items:center; justify-content:center; text-align:center; color:var(--ink-soft); font-style:italic;}
+  body.practice-active{overflow:auto;}
+  body.practice-active .wrap:has(.play-shell){height:auto; min-height:100vh; overflow:visible;}
+  body.practice-active .play-shell{height:auto; min-height:calc(100vh - 28px); grid-template-rows:auto auto auto;}
+  body.practice-active .play-explanation{overflow:visible; display:flex; flex-direction:column;}
+  body.practice-active .play-explanation .explain{height:auto; max-height:none;}
+  body.practice-active .play-layout{overflow:visible;}
   .score-pops{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; pointer-events:none;}
   .score-pop{font-family:"Big Shoulders Display",sans-serif; font-weight:900; font-size:1.3rem; line-height:1; letter-spacing:.02em; color:var(--wire); transform-origin:center; animation:scoreGrow var(--pop-dur,1500ms) linear var(--pop-delay,0ms) forwards;}
   .score-pop--bonus{color:var(--chain); font-size:1.05rem;}
@@ -281,6 +287,7 @@
 
   // ---- one-time config for this game ----
   Engine.configure({gameType: GAME_BRAND.gameType});
+  var practice = new URLSearchParams(location.search).has("practice");
 
   var POLL_MS = 1500;          // lobby / play poll cadence (engine adds jitter)
   var PROGRESS_FLUSH_MS = 5000; // coalesce live-score writes to protect the backend
@@ -304,6 +311,7 @@
   var CAT_ORDER = ["power","chain","productQuotient","trigExpLog","algebraSimplification","unitsInterpretation","clean"];
   var STAGE_TWO_CATEGORIES = ["power","chain","productQuotient","trigExpLog","algebraSimplification","unitsInterpretation"];
   var TIER_POINTS = {foundational:10, structured:15, abstract:20};
+  var RULE_LABELS = {power:"Power rule",product:"Product rule",quotient:"Quotient rule",chain:"Chain rule",trig:"Trigonometric derivatives",expLog:"Exponential and logarithmic derivatives",conceptual:"Conceptual, tangent, normal, and units"};
 
   /* ---------------------------------------------------------------
      STATE
@@ -328,15 +336,17 @@
     secondsLeft: 0, timerId: null, answering: false, answerTimer: null, countdownHandle: null,
     stage: "locate", feedback: null, feedbackKind: null, icons: {steps:{}, clean:"", categories:{}},
 
-    lbCache: [], lbLoaded: false
+    lbCache: [], lbLoaded: false,
+    practiceFilter:"all", practiceMisses:{}
   };
 
   function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
   function shuffle(arr){ var a=arr.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
-  function buildDeck(){
-    var foundational = shuffle(BANK.filter(function(item){ return item.tier === "foundational"; }));
-    var structured = shuffle(BANK.filter(function(item){ return item.tier === "structured"; }));
-    var abstract = shuffle(BANK.filter(function(item){ return item.tier === "abstract"; }));
+  function buildDeck(filter){
+    var available=filter&&filter!=="all"?BANK.filter(function(item){return item.ruleType===filter;}):BANK;
+    var foundational = shuffle(available.filter(function(item){ return item.tier === "foundational"; }));
+    var structured = shuffle(available.filter(function(item){ return item.tier === "structured"; }));
+    var abstract = shuffle(available.filter(function(item){ return item.tier === "abstract"; }));
     return foundational.concat(structured, abstract);
   }
   function mmss(sec){ var m=Math.floor(sec/60), s=sec%60; return m+":"+(s<10?"0":"")+s; }
@@ -374,6 +384,10 @@
   ----------------------------------------------------------------*/
   function render(){
     var app = document.getElementById("app");
+    document.body.classList.toggle("practice-active",practice&&state.screen==="play");
+    if (state.screen === "practice-setup") {
+      stopLobbyPresence(); document.body.classList.remove("b-joining"); app.innerHTML=viewPracticeSetup(); app.querySelector('#practiceTopic option[value="'+state.practiceFilter+'"]').setAttribute('selected',''); bind(); return;
+    }
     if (state.screen === "register") {
       stopLobbyPresence();
       Engine.join.mount(app, function(code){
@@ -459,6 +473,16 @@
   ----------------------------------------------------------------*/
   function viewLobby(){ return Engine.join.lobby(state.gameCode); }
 
+  function viewPracticeSetup(){
+    var topics=Object.keys(RULE_LABELS).filter(function(key){return BANK.some(function(item){return item.ruleType===key;});});
+    return masthead("Independent study")+'<section class="practice-setup"><p class="eyebrow">No room, ID, timer, or submitted score</p><h1>Untimed Practice</h1><p>Work through complete error-location and classification problems at your own pace.</p><label for="practiceTopic">Derivative topic</label><select id="practiceTopic"><option value="all">All content · '+BANK.length+' problems</option>'+topics.map(function(key){var count=BANK.filter(function(item){return item.ruleType===key;}).length;return '<option value="'+key+'">'+esc(RULE_LABELS[key])+' · '+count+' problems</option>';}).join('')+'</select><div class="practice-actions"><button class="btn btn-flag" id="practiceStartBtn">Start inspecting</button><a class="btn btn-ghost" href="index.html">Return to classroom entry</a></div></section>';
+  }
+
+  function startPractice(filter){
+    practice=true;stopLobbyPresence();Engine.session.stopPolling();clearInterval(state.timerId);clearTimeout(state.answerTimer);state.answerTimer=null;
+    state.practiceFilter=filter||"all";state.gameCode="";state.joinedRound=-1;state.deck=buildDeck(state.practiceFilter);state.idx=0;state.score=0;state.streak=0;state.bestStreak=0;state.correct=0;state.attempted=0;state.misses={};state.practiceMisses={};state.answering=false;state.stage="locate";state.feedback=null;state.feedbackKind=null;state.icons={steps:{},clean:"",categories:{}};state.screen="play";render();
+  }
+
   /* ---------------------------------------------------------------
      JOINING A ROUND — all local from here on
   ----------------------------------------------------------------*/
@@ -529,7 +553,7 @@
   }
 
   function viewPlay(){
-    if (state.idx >= state.deck.length) state.deck = state.deck.concat(buildDeck());
+    if (state.idx >= state.deck.length){ if(practice){state.screen="results";return viewResults();} state.deck = state.deck.concat(buildDeck()); }
     var card = currentCard();
     var total = state.joinedSeconds || 1;
     var pct = Math.max(0, Math.min(100, Math.round((state.secondsLeft/total)*100)));
@@ -571,7 +595,7 @@
     }
     var explanation = (state.feedback && !isMiss)
       ? '<div class="explain show"><b>'+esc(state.feedback.title)+'.</b> '+esc(state.feedback.detail)+'<br>'+card.explanation+'</div>'
-      : '<div class="explain explain-empty">Feedback will appear here after you respond.</div>';
+      : practice&&isMiss?'<div class="explain show">Review the highlighted correction, then continue when you are ready.</div>':'<div class="explain explain-empty">Feedback will appear here after you respond.</div>';
     var scorePops = "";
     if (state.feedback && state.feedback.scorePop){
       var sp = state.feedback.scorePop;
@@ -584,16 +608,12 @@
           : '') +
         '</div>';
     }
+    var playHeader=practice
+      ? '<div class="play-header"><div class="practice-progress">Untimed Practice · Problem '+(state.idx+1)+' of '+state.deck.length+'</div><div class="hud"><div class="hud-block">Practice Points<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div><div class="hud-block">Correct<span class="hud-num mono">'+state.correct+'/'+state.attempted+'</span></div><div class="hud-block">Time<span class="hud-num mono">UNTIMED</span></div></div></div>'
+      : '<div class="play-header"><div class="hud"><div class="hud-block">Score<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div><div class="hud-block">Streak<span class="hud-num mono" id="streakNum">'+state.streak+'</span></div><div class="hud-block">Time Left<span class="hud-num mono" id="secLeft">'+mmss(state.secondsLeft)+'</span></div></div><div class="timerbar"><div class="timerfill" id="timerFill" style="width:'+pct+'%; background:'+barColor+';"></div></div>'+lateNote+'</div>';
     return '' +
       '<div class="play-shell">' +
-      '<div class="play-header"><div class="hud">' +
-          '<div class="hud-block">Score<span class="hud-num mono" id="scoreNum">'+state.score+'</span></div>' +
-          '<div class="hud-block">Streak<span class="hud-num mono" id="streakNum">'+state.streak+'</span></div>' +
-          '<div class="hud-block">Time Left<span class="hud-num mono" id="secLeft">'+mmss(state.secondsLeft)+'</span></div>' +
-        '</div>' +
-        '<div class="timerbar"><div class="timerfill" id="timerFill" style="width:'+pct+'%; background:'+barColor+';"></div></div>' +
-        lateNote +
-      '</div>' +
+      playHeader +
       '<div class="play-layout">' +
       '<div class="play-pane play-pane-work"><div class="work-card'+(card.steps.length > 5 ? ' work-card--dense' : '')+'">' +
         '<div class="work-head"><div class="work-who"><div class="work-title">Worked derivative</div><div class="work-meta">'+esc(card.tier)+' tier</div></div></div>' +
@@ -602,21 +622,22 @@
       '</div></div>' +
       '<div class="play-pane play-pane-classify"><div class="card classify-card">'+classify+'</div></div>' +
       '</div>' +
-      '<div class="play-explanation">'+explanation+scorePops+'</div>' +
+      '<div class="play-explanation">'+explanation+scorePops+(practice&&state.feedback?'<button class="btn btn-flag practice-next" id="practiceNextBtn">Next problem →</button>':'')+'</div>' +
       '</div>';
   }
 
   function recordMiss(card){
-    var missKey = card.errorCategory || "clean";
-    state.misses[missKey] = (state.misses[missKey]||0)+1;
+    var missKey = practice ? card.ruleType : (card.errorCategory || "clean");
+    var target = practice ? state.practiceMisses : state.misses;
+    target[missKey] = (target[missKey]||0)+1;
   }
 
   function awardStageOneCorrect(card){
     var points = TIER_POINTS[card.tier];
     state.attempted += 1; state.correct += 1; state.streak += 1;
     state.bestStreak = Math.max(state.bestStreak, state.streak);
-    var bonus = state.streak >= 3 ? (state.streak-2)*5 : 0;
-    if (state.streak >= 3) points += (state.streak-2)*5;
+    var bonus = !practice && state.streak >= 3 ? (state.streak-2)*5 : 0;
+    if (!practice && state.streak >= 3) points += (state.streak-2)*5;
     state.score += points;
     pushPlayerProgress();
     return {base: TIER_POINTS[card.tier], bonus: bonus};
@@ -633,6 +654,7 @@
     state.answering = true;
     state.feedback = {title:title, detail:detail, scorePop: scorePop || null, holdMs: delay};
     render();
+    if(practice)return;
     state.answerTimer = setTimeout(function(){
       state.answerTimer = null;
       if (state.screen !== "play") return;   // a force-end landed while reading
@@ -641,6 +663,13 @@
       if (state.secondsLeft <= 0){ clearInterval(state.timerId); finishRun(); }
       render();
     }, delay);
+  }
+
+  function nextPracticeItem(){
+    if(!practice||!state.answering)return;
+    state.idx++;state.answering=false;state.stage="locate";state.feedback=null;state.feedbackKind=null;state.icons={steps:{},clean:"",categories:{}};
+    if(state.idx>=state.deck.length)state.screen="results";
+    render();
   }
 
   function handleLocate(choice){
@@ -686,6 +715,7 @@
   }
 
   function finishRun(){
+    if(practice){state.screen="results";render();return;}
     if (state.screen === "results") return;   // already filed — don't double-save
     state.screen = "results";
     clearTimeout(state.answerTimer); state.answerTimer = null;
@@ -709,7 +739,7 @@
   var lobbyPresenceTimer = null;
 
   function pushPlayerProgress(force){
-    if (!state.gameCode || state.joinedRound < 0) return;
+    if (practice || !state.gameCode || state.joinedRound < 0) return;
     progDirty = true;
     if (force){ clearTimeout(progTimer); progTimer = null; flushProgress(); return; }
     if (progTimer) return;
@@ -765,6 +795,10 @@
   ----------------------------------------------------------------*/
   function viewResults(){
     var accuracy = state.attempted ? Math.round((state.correct/state.attempted)*100) : 0;
+    if(practice){
+      var topicRows=Object.keys(state.practiceMisses).sort(function(a,b){return state.practiceMisses[b]-state.practiceMisses[a];}).map(function(key){return '<li>'+esc(RULE_LABELS[key]||key)+' · '+state.practiceMisses[key]+' missed problem'+(state.practiceMisses[key]===1?'':'s')+'</li>';}).join('');
+      return masthead("Untimed Practice Complete")+'<div class="card"><div class="score-hero"><div class="score-num mono">'+accuracy+'%</div><div class="score-cap">Accuracy</div></div><div class="stat-row"><div class="stat-tile"><span class="n">'+state.correct+'</span><span class="l">Correct answers</span></div><div class="stat-tile"><span class="n">'+state.attempted+'</span><span class="l">Attempts</span></div><div class="stat-tile"><span class="n">'+state.score+'</span><span class="l">Practice points</span></div></div><div class="corrections"><p class="eyebrow">Topics to revisit</p>'+(topicRows?'<ul class="practice-results-list">'+topicRows+'</ul>':'<p>No missed topics recorded.</p>')+'</div><div class="practice-actions"><button class="btn btn-flag" id="practiceAgainBtn">Practice again</button><button class="btn btn-ghost" id="practiceChooseBtn">Choose different content</button><a class="btn btn-ghost" href="index.html">Classroom entry</a></div></div>';
+    }
     var missEntries = Object.keys(state.misses).sort(function(a,b){ return state.misses[b]-state.misses[a]; });
     var corrRows = missEntries.length ? missEntries.map(function(k){
       return '<div class="corr-row"><span>'+esc(CATS[k].label)+'</span><span class="mono">&times;'+state.misses[k]+'</span></div>';
@@ -821,6 +855,10 @@
   ----------------------------------------------------------------*/
   function bind(){
     var el;
+    if ((el = document.getElementById("practiceStartBtn"))) el.addEventListener("click", function(){startPractice(document.getElementById("practiceTopic").value);});
+    if ((el = document.getElementById("practiceNextBtn"))) el.addEventListener("click", nextPracticeItem);
+    if ((el = document.getElementById("practiceAgainBtn"))) el.addEventListener("click", function(){startPractice(state.practiceFilter);});
+    if ((el = document.getElementById("practiceChooseBtn"))) el.addEventListener("click", function(){state.screen="practice-setup";render();});
     if ((el = document.getElementById("toLbBtn"))) el.addEventListener("click", function(){ state.screen="leaderboard"; refreshLeaderboard(); render(); });
     if ((el = document.getElementById("switchCodeBtn"))) el.addEventListener("click", function(){
       Engine.session.stopPolling();
@@ -899,7 +937,7 @@
   /* ---------------------------------------------------------------
      BOOT
   ----------------------------------------------------------------*/
-  state.screen="register"; state.gameCode="";
+  state.screen=practice?"practice-setup":"register"; state.gameCode="";
   setInterval(function(){
     if (state.screen === "leaderboard") refreshLeaderboard();
   }, 15000);
